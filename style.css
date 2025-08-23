@@ -1,0 +1,393 @@
+/* General Body and Resets */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* Main Container */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+/* Header */
+.header {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 30px;
+    text-align: center;
+}
+
+.header h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+    font-weight: 300;
+}
+
+.header p {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+/* Navigation Tabs */
+.nav-tabs {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.nav-tab {
+    flex: 1;
+    padding: 15px 20px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 500;
+    color: #6c757d;
+    transition: all 0.3s ease;
+    border-bottom: 3px solid transparent;
+}
+
+.nav-tab.active {
+    color: #495057;
+    background: white;
+    border-bottom-color: #007bff;
+}
+
+.nav-tab:hover:not(.active) {
+    background: #e9ecef;
+    color: #495057;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+    padding: 30px;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Cards */
+.card {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    margin-bottom: 25px;
+    overflow: hidden;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    padding: 20px;
+    font-size: 1.3em;
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 25px;
+}
+
+/* Forms */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #495057;
+}
+
+.form-input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 1em;
+    transition: all 0.3s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
+}
+
+/* Buttons */
+.btn {
+    padding: 12px 25px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,123,255,0.4);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+}
+
+.btn-warning {
+     background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+     color: #212529;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+}
+
+.btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40,167,69,0.4);
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    color: white;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.8em;
+}
+
+/* Paystub Specific */
+.paystub {
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    border: 2px solid #000;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.paystub-header {
+    background: #f8f9fa;
+    padding: 15px;
+    border-bottom: 2px solid #000;
+}
+
+.company-info {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.company-name {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.pay-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.employee-info, .period-info {
+    flex: 1;
+}
+
+.non-negotiable {
+    text-align: center;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.paystub-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+}
+
+.paystub-table th,
+.paystub-table td {
+    border: 1px solid #000;
+    padding: 8px;
+    text-align: left;
+}
+
+.paystub-table th {
+    background: #e9ecef;
+    font-weight: bold;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.totals-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.summary-box {
+    border: 2px solid #000;
+    padding: 15px;
+}
+
+.net-pay {
+    background: #d4edda;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    padding: 15px;
+    border: 2px solid #000;
+    margin: 15px 0;
+}
+
+.pto-summary {
+    padding: 15px;
+    border: 2px solid #000;
+    margin-top: 15px;
+    background-color: #f8f9fa;
+}
+
+.pto-summary h4 {
+    margin-bottom: 10px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* Report Tables */
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.report-table th,
+.report-table td {
+    border: 1px solid #dee2e6;
+    padding: 12px;
+    text-align: left;
+}
+
+.report-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.report-table tr:nth-child(even) {
+    background: #f8f9fa;
+}
+
+.report-table .credit {
+    color: #28a745;
+}
+
+.report-table .debit {
+    color: #dc3545;
+}
+
+.report-table .total-row td {
+    font-weight: bold;
+    background-color: #e9ecef;
+}
+
+.report-table .sub-total-row td {
+    font-weight: bold;
+    background-color: #f8f9fa;
+}
+
+/* Alerts and Indicators */
+.alert {
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.alert-info {
+    background: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+}
+
+.alert-success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-active {
+    background: #28a745;
+}
+
+.status-pending {
+    background: #ffc107;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .nav-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .nav-tab {
+        flex: 1 1 50%;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .pay-info {
+        flex-direction: column;
+    }
+    
+    .totals-section {
+        grid-template-columns: 1fr;
+    }
+}
