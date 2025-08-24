@@ -66,6 +66,10 @@ function handleHoursChange() {
     ui.updateBankProjectionsUI();
     ui.displayRegister();
     saveData();
+    const currentBalance = logic.getCurrentBankBalance();
+    if (currentBalance < 0) {
+        ui.showInsufficientFundsModal(currentBalance);
+    }
 }
 
 /**
@@ -188,6 +192,14 @@ function setupEventListeners() {
     
     // Pay Stub
     document.getElementById('printPayStubBtn').addEventListener('click', ui.printPayStub);
+
+    // Modal closing
+    document.getElementById('closeModalBtn').addEventListener('click', ui.hideInsufficientFundsModal);
+    document.getElementById('insufficientFundsModal').addEventListener('click', (event) => {
+        if (event.target.id === 'insufficientFundsModal') {
+            ui.hideInsufficientFundsModal();
+        }
+    });
 }
 
 /**

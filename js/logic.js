@@ -335,7 +335,13 @@ export function getBankProjections() {
         avgHours: avgHours
     };
 }
-
+/**
+ * Calculates the current balance of the bank register.
+ * @returns {number} The current total balance.
+ */
+export function getCurrentBankBalance() {
+    return appData.bankRegister.reduce((balance, trans) => balance + trans.credit - trans.debit, 0);
+}
 // --- SETTINGS MANAGEMENT ---
 
 /**

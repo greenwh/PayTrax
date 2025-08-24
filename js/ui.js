@@ -418,3 +418,28 @@ export function printPayStub() {
     printWindow.document.close();
     printWindow.print();
 }
+/**
+ * Displays an alert modal for insufficient bank funds.
+ * @param {number} balance - The current negative balance.
+ */
+export function showInsufficientFundsModal(balance) {
+    const modal = document.getElementById('insufficientFundsModal');
+    const balanceEl = document.getElementById('modalBalance');
+    if (modal && balanceEl) {
+        balanceEl.textContent = `$${balance.toFixed(2)}`;
+        modal.style.display = 'flex'; // Use flex for centering
+        setTimeout(() => modal.classList.add('visible'), 10); // Trigger transition
+    }
+}
+
+/**
+ * Hides the insufficient funds modal.
+ */
+export function hideInsufficientFundsModal() {
+    const modal = document.getElementById('insufficientFundsModal');
+    if (modal) {
+        modal.classList.remove('visible');
+        // Wait for transition to finish before hiding
+        setTimeout(() => modal.style.display = 'none', 300);
+    }
+}
