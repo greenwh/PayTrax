@@ -198,7 +198,9 @@ export function renderEmployeeFormForEdit(employeeId) {
     document.getElementById('stateTax').value = employee.stateTaxRate;
     document.getElementById('localTax').value = employee.localTaxRate;
     document.getElementById('ptoAccrualRate').value = employee.ptoAccrualRate;
-    document.getElementById('ptoBalance').value = employee.ptoBalance;
+    // Fixing long decimals in PTO
+	//document.getElementById('ptoBalance').value = employee.ptoBalance;
+	document.getElementById('ptoBalance').value = employee.ptoBalance.toFixed(2);
     document.getElementById('deleteEmployeeBtn').style.display = 'inline-block';
 }
 

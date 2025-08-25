@@ -165,7 +165,10 @@ export function calculatePay() {
     } else {
         ptoAccruedThisPeriod = originalPtoAccrued;
     }
-    employee.ptoBalance = (currentPtoBalance + ptoAccruedThisPeriod) - hours.pto;
+    
+	// Fixing long decimals in PTO
+	//employee.ptoBalance = (currentPtoBalance + ptoAccruedThisPeriod) - hours.pto;
+	employee.ptoBalance = parseFloat(((currentPtoBalance + ptoAccruedThisPeriod) - hours.pto).toFixed(2));
 
     // --- Update Period Data in State ---
     period.hours = hours;
