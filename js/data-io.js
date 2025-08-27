@@ -1,39 +1,48 @@
 // js/data-io.js
 
-import { appData, saveData, replaceState } from './state.js';
+import { appData, saveData, replaceState, CURRENT_VERSION } from './state.js';
+import { migrateData } from './migration.js';
 
 /**
  * Handles the process of importing data from a user-selected JSON file.
+ * Now includes version checking and data migration.
  */
 export function importData() {
-    // Create a temporary file input element
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.json,application/json';
 
-    // Listen for the file selection
     fileInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
-        if (!file) {
-            return; // User cancelled the dialog
-        }
+        if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = async (e) => { // Make the handler async
+        reader.onload = async (e) => {
             try {
-                const importedData = JSON.parse(e.target.result);
+                let importedData = JSON.parse(e.target.result);
 
-                // Basic validation to ensure it's a valid data file
-                if (!importedData.settings || !importedData.employees || !importedData.payPeriods) {
+                if (!importedData.settings || !importedData.employees) {
                     throw new Error('Invalid or corrupted data file.');
                 }
 
-                // Replace the current application state with the imported data
-                replaceState(importedData);
-                await saveData(); // Await persisting the new state
+                const importVersion = importedData.version || 1; // Default to 1 if no version exists
 
-                alert('Data imported successfully! The application will now reload.');
-                window.location.reload(); // Reload to apply the new state everywhere
+                if (importVersion > CURRENT_VERSION) {
+                    throw new Error(`Import failed. The data file is from a newer version (v${importVersion}) of PayTrax. Please update this application.`);
+                }
+
+                let message = 'Data imported successfully!';
+                if (importVersion < CURRENT_VERSION) {
+                    console.log(`Old data format (v${importVersion}) detected. Migrating to v${CURRENT_VERSION}...`);
+                    importedData = migrateData(importedData);
+                    message = 'Backup from a previous version was successfully updated and imported!';
+                }
+
+                replaceState(importedData);
+                await saveData(); 
+
+                alert(message + ' The application will now reload.');
+                window.location.reload();
 
             } catch (error) {
                 console.error("Failed to import data:", error);
@@ -48,7 +57,6 @@ export function importData() {
         reader.readAsText(file);
     });
 
-    // Programmatically click the input to open the file dialog
     fileInput.click();
 }
 
@@ -57,6 +65,7 @@ export function importData() {
  */
 export function exportData() {
     try {
+        appData.version = CURRENT_VERSION;
         // Create a formatted JSON string from the application data
         const dataStr = JSON.stringify(appData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });

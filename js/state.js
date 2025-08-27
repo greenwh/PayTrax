@@ -3,6 +3,8 @@ import * as db from './db.js';
 
 // --- CONFIGURATION & DEFAULT STATE ---
 
+export const CURRENT_VERSION = 2;
+
 // Constants for tax calculations
 export const SS_WAGE_BASE = 168600;
 export const FUTA_WAGE_BASE = 7000;
@@ -10,6 +12,7 @@ let dbInitialized = false;
 
 // Default structure for the application data
 export const defaultAppData = {
+    version: CURRENT_VERSION,
     settings: {
         companyName: 'Your Company LLC',
         taxYear: new Date().getFullYear(),
@@ -126,14 +129,7 @@ export async function loadData() {
 export function replaceState(newData) {
     appData = newData;
     
-    // Gracefully add new settings properties if importing older data structures
-    if (!appData.settings.taxFrequencies) {
-        appData.settings.taxFrequencies = defaultAppData.settings.taxFrequencies;
-    }
-    if (!appData.settings.firstPayPeriodStartDate) {
-        appData.settings.firstPayPeriodStartDate = '';
-    }
-    if (appData.settings.daysUntilPayday === undefined) {
-        appData.settings.daysUntilPayday = 5;
-    }
+    // Ensure the version is set, defaulting to 1 for older data.
+    if (!appData.version) {
+        appData.version = 1;
 }
