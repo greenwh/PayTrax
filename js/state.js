@@ -132,4 +132,5 @@ export function replaceState(newData) {
     // Ensure the version is set, defaulting to 1 for older data.
     if (!appData.version) {
         appData.version = 1;
+    }
 }
