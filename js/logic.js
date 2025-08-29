@@ -61,7 +61,10 @@ export function generateBasePayPeriods() {
         hours: { regular: 0, overtime: 0, pto: 0, holiday: 0 },
         earnings: { regular: 0, overtime: 0, pto: 0, holiday: 0 },
         grossPay: 0, netPay: 0, ptoAccrued: 0,
-        taxes: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0, total: 0 }
+        taxes: { 
+            federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0, total: 0,
+            unrounded: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 }
+        }
     }));
 }
 
@@ -110,6 +113,7 @@ export function updateHoursFromPeriod(employeeId, periodNum) {
 
 /**
  * Calculates pay based on the hours in the UI and updates the appData object.
+ * This function now uses a "running remainder" strategy for tax calculations.
  */
 export function calculatePay() {
     const employeeId = document.getElementById('currentEmployee').value;
@@ -117,10 +121,18 @@ export function calculatePay() {
     
     if (!employeeId || !periodNum) return;
 
-    const employee = appData.employees.find(e => e.id === employeeId);
-    const period = appData.payPeriods[employeeId].find(p => p.period == periodNum);
-    if (!employee || !period) return;
+    const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
+    if (employeeIndex === -1) return;
     
+    const employee = appData.employees[employeeIndex];
+    const period = appData.payPeriods[employeeId].find(p => p.period == periodNum);
+    if (!period) return;
+    
+    // Ensure taxRemainders object exists for backward compatibility
+    if (!employee.taxRemainders) {
+        employee.taxRemainders = { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
+    }
+
     const hours = {
         regular: parseFloat(document.getElementById('regularHours').value) || 0,
         overtime: parseFloat(document.getElementById('overtimeHours').value) || 0,
@@ -136,39 +148,49 @@ export function calculatePay() {
     };
     
     const grossPay = Object.values(earnings).reduce((sum, val) => sum + val, 0);
-
     const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
-    const federalTax = grossPay * (employee.fedTaxRate / 100);
-    const stateTax = grossPay * (employee.stateTaxRate / 100);
-    const localTax = grossPay * (employee.localTaxRate / 100);
-    const ficaTax = grossPay * (socialSecurity / 100);
-    const medicareTax = grossPay * (medicare / 100);
-    const sutaTax = grossPay * (sutaRate / 100);
-    const futaTax = grossPay * (futaRate / 100);
+
+    // --- NEW: Running Remainder Calculation Logic ---
+    const unrounded = {};
+    const rounded = {};
+    const newRemainders = {};
+
+    // Helper function to process each tax by carrying forward the remainder from the previous payroll
+    const calculateTaxWithRemainder = (taxName, calculation) => {
+        const previousRemainder = employee.taxRemainders[taxName] || 0;
+        unrounded[taxName] = calculation;
+        const totalToConsider = unrounded[taxName] + previousRemainder;
+        rounded[taxName] = parseFloat(totalToConsider.toFixed(2));
+        newRemainders[taxName] = totalToConsider - rounded[taxName];
+    };
     
-    const employeeTaxes = federalTax + stateTax + localTax + ficaTax + medicareTax;
+    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));
+    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));
+    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));
+    calculateTaxWithRemainder('fica', grossPay * (socialSecurity / 100));
+    calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));
+    calculateTaxWithRemainder('suta', grossPay * (sutaRate / 100));
+    calculateTaxWithRemainder('futa', grossPay * (futaRate / 100));
+
+    // Update the employee's stored remainders for the next pay run
+    appData.employees[employeeIndex].taxRemainders = newRemainders;
+    
+    const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
     const netPay = grossPay - employeeTaxes;
     
-    // --- PTO Calculation ---
+    // --- PTO Calculation (remains the same) ---
     const originalPtoUsed = period.hours.pto || 0;
     const originalPtoAccrued = period.ptoAccrued || 0;
     let ptoAccruedThisPeriod = 0;
-    
     let currentPtoBalance = (employee.ptoBalance + originalPtoUsed) - originalPtoAccrued;
-    
     const totalOriginalHours = period.hours ? Object.values(period.hours).reduce((a, b) => a + b, 0) : 0;
     if (totalOriginalHours === 0 && (hours.regular > 0 || hours.overtime > 0)) {
          const periodsInYear = (appData.payPeriods[employeeId] || []).length;
-         if (periodsInYear > 0) {
-             ptoAccruedThisPeriod = employee.ptoAccrualRate / periodsInYear;
-         }
+         if (periodsInYear > 0) ptoAccruedThisPeriod = employee.ptoAccrualRate / periodsInYear;
     } else {
         ptoAccruedThisPeriod = originalPtoAccrued;
     }
-    
-	// Fixing long decimals in PTO
-	//employee.ptoBalance = (currentPtoBalance + ptoAccruedThisPeriod) - hours.pto;
-	employee.ptoBalance = parseFloat(((currentPtoBalance + ptoAccruedThisPeriod) - hours.pto).toFixed(2));
+	appData.employees[employeeIndex].ptoBalance = parseFloat(((currentPtoBalance + ptoAccruedThisPeriod) - hours.pto).toFixed(2));
 
     // --- Update Period Data in State ---
     period.hours = hours;
@@ -176,10 +198,10 @@ export function calculatePay() {
     period.grossPay = grossPay;
     period.netPay = netPay;
     period.ptoAccrued = ptoAccruedThisPeriod;
-    period.taxes = { federal: federalTax, fica: ficaTax, medicare: medicareTax, state: stateTax, local: localTax, suta: sutaTax, futa: futaTax, total: employeeTaxes };
+    period.taxes = { ...rounded, total: employeeTaxes, unrounded };
     
     // --- Update Bank Register ---
-    const totalPayrollCost = grossPay + sutaTax + futaTax + ficaTax + medicareTax;
+    const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
     const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;
     appData.bankRegister = appData.bankRegister.filter(t => t.id !== transactionId);
     if (totalPayrollCost > 0) {
@@ -218,10 +240,11 @@ export function getPayStubData(employeeId, periodNum) {
 
 /**
  * Reads data from the employee form and saves it to the appData state.
+ * Now includes logic to handle the taxRemainders object.
  */
 export function saveEmployeeFromForm() {
     const employeeId = document.getElementById('employeeId').value;
-    const employee = {
+    const employeeData = {
         id: employeeId || `emp_${new Date().getTime()}`,
         idNumber: document.getElementById('idNumber').value,
         name: document.getElementById('employeeName').value,
@@ -238,10 +261,19 @@ export function saveEmployeeFromForm() {
 
     if (employeeId) {
         const index = appData.employees.findIndex(e => e.id === employeeId);
-        if (index > -1) appData.employees[index] = employee;
+        if (index > -1) {
+            // When editing, preserve the existing remainders to not lose accumulated fractions
+            const existingRemainders = appData.employees[index].taxRemainders || { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
+            appData.employees[index] = { ...employeeData, taxRemainders: existingRemainders };
+        }
     } else {
-        appData.employees.push(employee);
-        appData.payPeriods[employee.id] = generateBasePayPeriods();
+        // For a new employee, create a fresh taxRemainders object
+        const newEmployee = {
+            ...employeeData,
+            taxRemainders: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 }
+        };
+        appData.employees.push(newEmployee);
+        appData.payPeriods[newEmployee.id] = generateBasePayPeriods();
     }
 }
 
@@ -338,6 +370,7 @@ export function getBankProjections() {
         avgHours: avgHours
     };
 }
+
 /**
  * Calculates the current balance of the bank register.
  * @returns {number} The current total balance.
@@ -345,6 +378,7 @@ export function getBankProjections() {
 export function getCurrentBankBalance() {
     return appData.bankRegister.reduce((balance, trans) => balance + trans.credit - trans.debit, 0);
 }
+
 // --- SETTINGS MANAGEMENT ---
 
 /**
@@ -418,8 +452,8 @@ export function generateTaxDepositReport() {
             switch (data.type) {
                 case 'federal': 
                     const fedWH = p.taxes.federal;
-                    const ficaTotal = p.taxes.fica * 2;
-                    const medicareTotal = p.taxes.medicare * 2;
+                    const ficaTotal = p.taxes.fica * 2; // Employer + Employee
+                    const medicareTotal = p.taxes.medicare * 2; // Employer + Employee
                     totalLiability += fedWH + ficaTotal + medicareTotal;
                     federalBreakdown.federal += fedWH;
                     federalBreakdown.fica += ficaTotal;
@@ -514,9 +548,11 @@ export function generate941Report(periodStr) {
     let line1 = employeeIdsInQuarter.length;
     let line2 = 0, line3 = 0;
     let line5a_col1 = 0, line5c_col1 = 0, line5d_col1 = 0;
-    let totalEmployeeSSTaxRounded = 0, totalEmployeeMedTaxRounded = 0;
     let monthlyLiabilities = [0, 0, 0];
     const qMonths = [start.getMonth(), start.getMonth() + 1, start.getMonth() + 2];
+    
+    let totalDeposited941Taxes = 0;
+    let totalUnrounded941Taxes = 0;
 
     appData.employees.forEach(emp => {
         let ytdSSWages = 0;
@@ -553,13 +589,20 @@ export function generate941Report(periodStr) {
                 line5d_col1 += p.grossPay;
             }
             ytdGross += p.grossPay;
-            
-            totalEmployeeSSTaxRounded += parseFloat((p.taxes.fica).toFixed(2));
-            totalEmployeeMedTaxRounded += parseFloat((p.taxes.medicare).toFixed(2));
+
+            const rounded941TaxThisPeriod = p.taxes.federal + (p.taxes.fica * 2) + (p.taxes.medicare * 2);
+            totalDeposited941Taxes += rounded941TaxThisPeriod;
+
+            if(p.taxes.unrounded) {
+                const unrounded941TaxThisPeriod = p.taxes.unrounded.federal + (p.taxes.unrounded.fica * 2) + (p.taxes.unrounded.medicare * 2);
+                totalUnrounded941Taxes += unrounded941TaxThisPeriod;
+            } else {
+                totalUnrounded941Taxes += rounded941TaxThisPeriod;
+            }
 
             const monthIndex = qMonths.indexOf(new Date(p.payDate).getMonth());
             if(monthIndex !== -1) {
-                monthlyLiabilities[monthIndex] += p.taxes.federal + (p.taxes.fica * 2) + (p.taxes.medicare * 2);
+                monthlyLiabilities[monthIndex] += rounded941TaxThisPeriod;
             }
         });
     });
@@ -568,17 +611,12 @@ export function generate941Report(periodStr) {
     const line5c_col2 = line5c_col1 * 0.029;
     const line5d_col2 = line5d_col1 * 0.009;
     const line5e = line5a_col2 + line5c_col2 + line5d_col2;
-    
-    const totalEmployeeSSTaxActual = line5a_col1 * (appData.settings.socialSecurity / 100);
-    const totalEmployeeMedTaxActual = line5c_col1 * (appData.settings.medicare / 100);
-    const line7 = (totalEmployeeSSTaxRounded + totalEmployeeMedTaxRounded) - (totalEmployeeSSTaxActual + totalEmployeeMedTaxActual);
-
     const line6 = line3 + line5e;
+    const line7 = totalDeposited941Taxes - parseFloat(totalUnrounded941Taxes.toFixed(2)) ;
     const line10 = line6 + line7;
     const line12 = line10;
-    const line13 = line12;
+    const line13 = totalDeposited941Taxes;
     const totalLiability = monthlyLiabilities.reduce((a, b) => a + b, 0);
-
 
     return `
         <h4>IRS Form 941 Data - ${title}</h4>
@@ -609,7 +647,7 @@ export function generate941Report(periodStr) {
                 <tr><td>11</td><td>Qualified small business payroll tax credit for increasing research activities</td><td style="text-align:right;">$0.00</td></tr>
                 <tr class="total-row"><td>12</td><td>Total taxes after adjustments and nonrefundable credits</td><td style="text-align:right;">$${line12.toFixed(2)}</td></tr>
                 <tr><td>13</td><td>Total deposits for this quarter</td><td style="text-align:right;">$${line13.toFixed(2)}</td></tr>
-                <tr class="total-row"><td>14</td><td>Balance due</td><td style="text-align:right;">$0.00</td></tr>
+                <tr class="total-row"><td>14</td><td>Balance due</td><td style="text-align:right;">$${(line12 - line13).toFixed(2)}</td></tr>
                 <tr class="total-row"><td>15</td><td>Overpayment</td><td style="text-align:right;">$0.00</td></tr>
             </tbody>
         </table>
@@ -653,7 +691,7 @@ export function generate940Report(yearStr) {
 
             const payDate = new Date(p.payDate);
             const quarter = Math.floor(payDate.getMonth() / 3) + 1;
-            quarterlyLiabilities[`q${quarter}`] += taxableFUTAWagesThisPeriod * 0.006;
+            quarterlyLiabilities[`q${quarter}`] += taxableFUTAWagesThisPeriod * (appData.settings.futaRate / 100);
         });
 
         if (ytdFUTAWages > FUTA_WAGE_BASE) {
@@ -663,7 +701,7 @@ export function generate940Report(yearStr) {
 
     const line6 = line4 + line5;
     const line7 = line3 - line6;
-    const line8 = line7 * 0.006;
+    const line8 = line7 * (appData.settings.futaRate / 100);
     const line12 = line8; // No adjustments
     const line13 = line12; // Assuming deposits match liability
     const line17 = line12;
@@ -695,7 +733,7 @@ export function generate940Report(yearStr) {
                 <tr><td>5</td><td>Total of payments made to each employee in excess of $7,000</td><td style="text-align:right;">$${line5.toFixed(2)}</td></tr>
                 <tr class="sub-total-row"><td>6</td><td>Subtotal (line 4 + line 5)</td><td style="text-align:right;">$${line6.toFixed(2)}</td></tr>
                 <tr class="sub-total-row"><td>7</td><td>Total taxable FUTA wages (line 3 - line 6)</td><td style="text-align:right;">$${line7.toFixed(2)}</td></tr>
-                <tr class="total-row"><td>8</td><td>FUTA tax before adjustments (line 7 x 0.006)</td><td style="text-align:right;">$${line8.toFixed(2)}</td></tr>
+                <tr class="total-row"><td>8</td><td>FUTA tax before adjustments (line 7 x ${appData.settings.futaRate / 100})</td><td style="text-align:right;">$${line8.toFixed(2)}</td></tr>
             </tbody>
         </table>
          <h5 style="margin-top: 20px;">Part 3 & 4: Adjustments and Balance</h5>
