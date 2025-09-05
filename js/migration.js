@@ -27,6 +27,32 @@ function migrateToV2(data) {
 }
 
 /**
+ * Migrates data to v3 by adding the taxRemainders object to each employee.
+ * This ensures that older backup files are compatible with the new fractional cent tracking system.
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV3(data) {
+    console.log("Running migration to v3...");
+    if (data.employees && Array.isArray(data.employees)) {
+        data.employees.forEach(emp => {
+            // Check if the property already exists to avoid overwriting it
+            if (emp.taxRemainders === undefined) {
+                emp.taxRemainders = { 
+                    federal: 0, 
+                    fica: 0, 
+                    medicare: 0, 
+                    state: 0, 
+                    local: 0, 
+                    suta: 0, 
+                    futa: 0 
+                };
+            }
+        });
+    }
+    data.version = 3; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -39,8 +65,13 @@ export function migrateData(data) {
     switch (importVersion) {
         case 1:
             migrateToV2(data);
-        // case 2:
-        //     migrateToV3(data); // Add future migrations here
+            // Fall-through is intentional
+        case 2:
+            migrateToV3(data); // New case for version 3 migration
+            // Fall-through is intentional for future migrations
+            break; 
+        // case 3:
+        //     migrateToV4(data); // Add future migrations here
         //     break; 
         // ...and so on.
     }
