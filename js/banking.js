@@ -51,8 +51,47 @@ function handleRegisterClick(event) {
     }
 }
 
+/**
+ * Handles the clearing of all filter inputs.
+ */
+function handleClearFilters() {
+    document.getElementById('filterForm').reset();
+    displayRegister();
+}
+
 
 // --- LOGIC FUNCTIONS ---
+
+/**
+ * Filters the transaction list based on user-provided criteria.
+ * @param {Array} transactions - The array of transactions to filter.
+ * @param {object} filters - The filter criteria.
+ * @returns {Array} A new array containing only the filtered transactions.
+ */
+function filterTransactions(transactions, filters) {
+    let filtered = [...transactions];
+
+    if (filters.startDate) {
+        const start = new Date(filters.startDate + 'T00:00:00');
+        filtered = filtered.filter(t => new Date(t.date) >= start);
+    }
+    if (filters.endDate) {
+        const end = new Date(filters.endDate + 'T23:59:59');
+        filtered = filtered.filter(t => new Date(t.date) <= end);
+    }
+    if (filters.description) {
+        const searchTerm = filters.description.toLowerCase();
+        filtered = filtered.filter(t => t.description.toLowerCase().includes(searchTerm));
+    }
+    if (filters.status === 'reconciled') {
+        filtered = filtered.filter(t => t.reconciled === true);
+    }
+    if (filters.status === 'uncleared') {
+        filtered = filtered.filter(t => t.reconciled === false);
+    }
+
+    return filtered;
+}
 
 /**
  * Adds a transaction to the bank register from the UI form.
@@ -83,7 +122,7 @@ export function addTransaction(date, description, type, amount, id = null, silen
         date, description, 
         debit: type === 'debit' ? amount : 0, 
         credit: type === 'credit' ? amount : 0,
-        reconciled: false // NEW: Default all new transactions to not reconciled
+        reconciled: false
     });
 }
 
@@ -160,20 +199,37 @@ export function getCurrentBankBalance() {
 // --- UI FUNCTIONS ---
 
 /**
- * Renders the bank register table from the appData.
+ * Renders the bank register table from the appData, applying any active filters.
  */
 export function displayRegister() {
     const tbody = document.getElementById('bankRegisterBody');
     tbody.innerHTML = '';
-    let balance = 0;
-    
-    // Sort transactions by date before rendering
-    const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
 
+    // 1. Get filter criteria from the UI
+    const filters = {
+        startDate: document.getElementById('filterStartDate').value,
+        endDate: document.getElementById('filterEndDate').value,
+        description: document.getElementById('filterDescription').value,
+        status: document.getElementById('filterStatus').value,
+    };
+
+    // 2. Sort all transactions by date to calculate running balances correctly
+    const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // 3. Apply filters to get the transactions we need to display
+    const transactionsToDisplay = filterTransactions(sortedRegister, filters);
+
+    // 4. Create a map of correct running balances for all transactions
+    let runningBalance = 0;
+    const balanceMap = new Map();
     sortedRegister.forEach(trans => {
-        balance += trans.credit - trans.debit;
+        runningBalance += trans.credit - trans.debit;
+        balanceMap.set(trans.id, runningBalance);
+    });
+
+    // 5. Render only the filtered transactions
+    transactionsToDisplay.forEach(trans => {
         const row = document.createElement('tr');
-        // Add a 'reconciled' class to the row if the transaction is reconciled
         if (trans.reconciled) {
             row.classList.add('reconciled');
         }
@@ -182,7 +238,7 @@ export function displayRegister() {
             <td>${trans.date}</td><td>${trans.description}</td>
             <td class="debit">${trans.debit > 0 ? '$' + trans.debit.toFixed(2) : '-'}</td>
             <td class="credit">${trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-'}</td>
-            <td>$${balance.toFixed(2)}</td>
+            <td>$${balanceMap.get(trans.id).toFixed(2)}</td>
             <td style="text-align: center;">
                 <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}" ${trans.reconciled ? 'checked' : ''}>
             </td>
@@ -191,9 +247,11 @@ export function displayRegister() {
         tbody.appendChild(row);
     });
     
+    // 6. The main balance display always shows the true total balance
     const currentBalanceEl = document.getElementById('currentBalance');
-    currentBalanceEl.textContent = `$${balance.toFixed(2)}`;
-    currentBalanceEl.style.color = balance >= 0 ? '#28a745' : '#dc3545';
+    const finalBalance = runningBalance; // The final balance from our full calculation
+    currentBalanceEl.textContent = `$${finalBalance.toFixed(2)}`;
+    currentBalanceEl.style.color = finalBalance >= 0 ? '#28a745' : '#dc3545';
 }
 
 /**
@@ -240,8 +298,12 @@ export function hideInsufficientFundsModal() {
  */
 export function initBanking() {
     document.getElementById('transactionForm').addEventListener('submit', handleTransactionFormSubmit);
-    // Use a single delegated listener for the entire table body for efficiency
     document.getElementById('bankRegisterBody').addEventListener('click', handleRegisterClick);
+    
+    // Listen for any input or change in the filter form
+    document.getElementById('filterForm').addEventListener('input', displayRegister);
+    document.getElementById('clearFiltersBtn').addEventListener('click', handleClearFilters);
+
     document.getElementById('closeModalBtn').addEventListener('click', hideInsufficientFundsModal);
     document.getElementById('insufficientFundsModal').addEventListener('click', (event) => {
         if (event.target.id === 'insufficientFundsModal') {
