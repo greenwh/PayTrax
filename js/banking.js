@@ -13,10 +13,6 @@ import { generateBasePayPeriods } from './logic.js';
 
 // --- EVENT HANDLER FUNCTIONS (Internal to this module) ---
 
-/**
- * Handles the submission of a new bank transaction.
- * @param {Event} event - The form submission event.
- */
 function handleTransactionFormSubmit(event) {
     event.preventDefault();
     addTransactionFromForm();
@@ -25,16 +21,11 @@ function handleTransactionFormSubmit(event) {
     document.getElementById('transactionForm').reset();
 }
 
-/**
- * Handles clicks within the bank register table body.
- * @param {Event} event - The click event.
- */
 function handleRegisterClick(event) {
     const deleteButton = event.target.closest('.delete-transaction-btn');
     const reconcileCheckbox = event.target.closest('.reconcile-checkbox');
 
     if (deleteButton) {
-        // This confirmation will be made conditional in a future phase
         if (confirm('Are you sure you want to delete this transaction?')) {
             const transId = deleteButton.dataset.id;
             deleteTransaction(transId);
@@ -46,28 +37,37 @@ function handleRegisterClick(event) {
     if (reconcileCheckbox) {
         const transId = reconcileCheckbox.dataset.id;
         toggleTransactionReconciled(transId);
-        displayRegister(); // Re-render to apply styling
+        displayRegister();
         saveData();
     }
 }
 
-/**
- * Handles the clearing of all filter inputs.
- */
 function handleClearFilters() {
     document.getElementById('filterForm').reset();
     displayRegister();
 }
 
+function handlePurgeConfirm() {
+    const cutoffDateEl = document.getElementById('purgeCutoffDate');
+    const cutoffDate = cutoffDateEl.value;
+    if (!cutoffDate) {
+        alert('Please select a cutoff date.');
+        return;
+    }
+
+    const count = getPurgeableCount(cutoffDate);
+    if (confirm(`Are you sure you want to permanently delete ${count} reconciled transaction(s) on or before ${cutoffDate}? This cannot be undone.`)) {
+        const purgedCount = purgeTransactions(cutoffDate);
+        hidePurgeModal();
+        alert(`${purgedCount} transaction(s) have been purged.`);
+        displayRegister();
+        saveData();
+    }
+}
+
 
 // --- LOGIC FUNCTIONS ---
 
-/**
- * Filters the transaction list based on user-provided criteria.
- * @param {Array} transactions - The array of transactions to filter.
- * @param {object} filters - The filter criteria.
- * @returns {Array} A new array containing only the filtered transactions.
- */
 function filterTransactions(transactions, filters) {
     let filtered = [...transactions];
 
@@ -93,9 +93,6 @@ function filterTransactions(transactions, filters) {
     return filtered;
 }
 
-/**
- * Adds a transaction to the bank register from the UI form.
- */
 function addTransactionFromForm() {
     const date = document.getElementById('transDate').value;
     const desc = document.getElementById('transDesc').value;
@@ -106,15 +103,6 @@ function addTransactionFromForm() {
     addTransaction(formattedDate, desc, type, amount);
 }
 
-/**
- * Adds a transaction to the bank register in the appData state.
- * @param {string} date - The transaction date.
- * @param {string} description - The transaction description.
- * @param {string} type - 'debit' or 'credit'.
- * @param {number} amount - The transaction amount.
- * @param {string|null} id - An optional unique ID for the transaction.
- * @param {boolean} silent - If true, does not trigger a saveData call.
- */
 export function addTransaction(date, description, type, amount, id = null, silent = false) {
     if (amount <= 0 || !description || !date) return;
     appData.bankRegister.push({ 
@@ -126,18 +114,10 @@ export function addTransaction(date, description, type, amount, id = null, silen
     });
 }
 
-/**
- * Deletes a transaction from the bank register.
- * @param {string} transId - The ID of the transaction to delete.
- */
 function deleteTransaction(transId) {
     appData.bankRegister = appData.bankRegister.filter(t => t.id !== transId);
 }
 
-/**
- * Toggles the reconciled status of a specific transaction.
- * @param {string} transId - The ID of the transaction to update.
- */
 function toggleTransactionReconciled(transId) {
     const transaction = appData.bankRegister.find(t => t.id === transId);
     if (transaction) {
@@ -145,10 +125,22 @@ function toggleTransactionReconciled(transId) {
     }
 }
 
-/**
- * Calculates bank fund projections based on historical payroll data.
- * @returns {object} - Projections for this month, next month, and average hours.
- */
+function purgeTransactions(cutoffDateStr) {
+    const originalCount = appData.bankRegister.length;
+    const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
+    
+    appData.bankRegister = appData.bankRegister.filter(t => {
+        return new Date(t.date) > cutoffDate || t.reconciled === false;
+    });
+
+    return originalCount - appData.bankRegister.length;
+}
+
+function getPurgeableCount(cutoffDateStr) {
+    const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
+    return appData.bankRegister.filter(t => new Date(t.date) <= cutoffDate && t.reconciled === true).length;
+}
+
 function getBankProjections() {
     const allPayPeriodsWithData = [].concat.apply([], Object.values(appData.payPeriods)).filter(p => p.grossPay > 0);
     if (allPayPeriodsWithData.length === 0) {
@@ -187,25 +179,51 @@ function getBankProjections() {
     };
 }
 
-/**
- * Calculates the current balance of the bank register.
- * @returns {number} The current total balance.
- */
 export function getCurrentBankBalance() {
     return appData.bankRegister.reduce((balance, trans) => balance + trans.credit - trans.debit, 0);
 }
 
 
-// --- UI FUNCTIONS ---
+// --- UI & DATA MANAGEMENT FUNCTIONS ---
 
-/**
- * Renders the bank register table from the appData, applying any active filters.
- */
+function exportTransactionsToCSV() {
+    const filters = {
+        startDate: document.getElementById('filterStartDate').value,
+        endDate: document.getElementById('filterEndDate').value,
+        description: document.getElementById('filterDescription').value,
+        status: document.getElementById('filterStatus').value,
+    };
+    
+    const transactionsToExport = filterTransactions(appData.bankRegister, filters);
+
+    if (transactionsToExport.length === 0) {
+        alert('No transactions to export with the current filters.');
+        return;
+    }
+
+    let csvContent = "Date,Description,Debit,Credit,Reconciled\n";
+    transactionsToExport.forEach(t => {
+        const description = `"${t.description.replace(/"/g, '""')}"`;
+        const row = [t.date, description, t.debit, t.credit, t.reconciled].join(',');
+        csvContent += row + "\n";
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    const date = new Date().toISOString().slice(0, 10);
+    link.setAttribute("download", `PayTrax_Register_Export_${date}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 export function displayRegister() {
     const tbody = document.getElementById('bankRegisterBody');
     tbody.innerHTML = '';
 
-    // 1. Get filter criteria from the UI
     const filters = {
         startDate: document.getElementById('filterStartDate').value,
         endDate: document.getElementById('filterEndDate').value,
@@ -213,13 +231,9 @@ export function displayRegister() {
         status: document.getElementById('filterStatus').value,
     };
 
-    // 2. Sort all transactions by date to calculate running balances correctly
     const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    // 3. Apply filters to get the transactions we need to display
     const transactionsToDisplay = filterTransactions(sortedRegister, filters);
 
-    // 4. Create a map of correct running balances for all transactions
     let runningBalance = 0;
     const balanceMap = new Map();
     sortedRegister.forEach(trans => {
@@ -227,7 +241,6 @@ export function displayRegister() {
         balanceMap.set(trans.id, runningBalance);
     });
 
-    // 5. Render only the filtered transactions
     transactionsToDisplay.forEach(trans => {
         const row = document.createElement('tr');
         if (trans.reconciled) {
@@ -247,16 +260,12 @@ export function displayRegister() {
         tbody.appendChild(row);
     });
     
-    // 6. The main balance display always shows the true total balance
     const currentBalanceEl = document.getElementById('currentBalance');
-    const finalBalance = runningBalance; // The final balance from our full calculation
+    const finalBalance = runningBalance;
     currentBalanceEl.textContent = `$${finalBalance.toFixed(2)}`;
     currentBalanceEl.style.color = finalBalance >= 0 ? '#28a745' : '#dc3545';
 }
 
-/**
- * Updates the bank fund projection widgets on the dashboard.
- */
 export function updateBankProjectionsUI() {
     const { thisMonthRequired, nextMonthRequired, avgHours } = getBankProjections();
     document.getElementById('thisMonthRequired').textContent = thisMonthRequired.toFixed(2);
@@ -264,46 +273,60 @@ export function updateBankProjectionsUI() {
     document.getElementById('projectedHours').textContent = avgHours.toFixed(1);
 }
 
-/**
- * Displays an alert modal for insufficient bank funds.
- * @param {number} balance - The current negative balance.
- */
-export function showInsufficientFundsModal(balance) {
-    const modal = document.getElementById('insufficientFundsModal');
-    const balanceEl = document.getElementById('modalBalance');
-    if (modal && balanceEl) {
-        balanceEl.textContent = `$${balance.toFixed(2)}`;
-        modal.style.display = 'flex'; // Use flex for centering
-        setTimeout(() => modal.classList.add('visible'), 10); // Trigger transition
+function showModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('visible'), 10);
     }
 }
 
-/**
- * Hides the insufficient funds modal.
- */
-export function hideInsufficientFundsModal() {
-    const modal = document.getElementById('insufficientFundsModal');
+function hideModal(modalId) {
+    const modal = document.getElementById(modalId);
     if (modal) {
         modal.classList.remove('visible');
-        // Wait for transition to finish before hiding
         setTimeout(() => modal.style.display = 'none', 300);
     }
+}
+
+export function showInsufficientFundsModal(balance) {
+    showModal('insufficientFundsModal');
+    const balanceEl = document.getElementById('modalBalance');
+    if (balanceEl) {
+        balanceEl.textContent = `$${balance.toFixed(2)}`;
+    }
+}
+
+function hideInsufficientFundsModal() {
+    hideModal('insufficientFundsModal');
+}
+
+function showPurgeModal() {
+    showModal('purgeTransactionsModal');
+    document.getElementById('purgeCutoffDate').valueAsDate = new Date();
+}
+
+function hidePurgeModal() {
+    hideModal('purgeTransactionsModal');
 }
 
 
 // --- INITIALIZATION ---
 
-/**
- * Sets up all the event listeners for the banking module.
- */
 export function initBanking() {
     document.getElementById('transactionForm').addEventListener('submit', handleTransactionFormSubmit);
     document.getElementById('bankRegisterBody').addEventListener('click', handleRegisterClick);
     
-    // Listen for any input or change in the filter form
     document.getElementById('filterForm').addEventListener('input', displayRegister);
     document.getElementById('clearFiltersBtn').addEventListener('click', handleClearFilters);
 
+    document.getElementById('exportCsvBtn').addEventListener('click', exportTransactionsToCSV);
+    document.getElementById('openPurgeModalBtn').addEventListener('click', showPurgeModal);
+
+    document.getElementById('closePurgeModalBtn').addEventListener('click', hidePurgeModal);
+    document.getElementById('cancelPurgeBtn').addEventListener('click', hidePurgeModal);
+    document.getElementById('confirmPurgeBtn').addEventListener('click', handlePurgeConfirm);
+    
     document.getElementById('closeModalBtn').addEventListener('click', hideInsufficientFundsModal);
     document.getElementById('insufficientFundsModal').addEventListener('click', (event) => {
         if (event.target.id === 'insufficientFundsModal') {

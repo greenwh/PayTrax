@@ -570,7 +570,6 @@
                         </div>
                     </div>
 
-                    <!-- NEW: Filter Controls -->
                     <div class="card" style="margin-top: 30px;">
                         <div class="card-header" style="background: linear-gradient(135deg, #17a2b8 0%, #1f9faf 100%);">Filter Transactions</div>
                         <div class="card-body">
@@ -602,6 +601,17 @@
                         </div>
                     </div>
 
+                    <div class="card" style="margin-top: 30px;">
+                         <div class="card-header" style="background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%); color: #212529;">Register Actions</div>
+                         <div class="card-body" style="text-align: center;">
+                            <p style="margin-bottom: 20px;">Export the currently filtered transactions to a CSV file or permanently delete old, reconciled transactions.</p>
+                             <div style="display: flex; justify-content: center; gap: 15px;">
+                                <button class="btn btn-success" id="exportCsvBtn">Export to CSV</button>
+                                <button class="btn btn-danger" id="openPurgeModalBtn">Purge Transactions...</button>
+                            </div>
+                         </div>
+                    </div>
+
                     <div style="overflow-x: auto; margin-top: 30px;">
                         <table class="report-table" id="bankRegisterTable">
                             <thead>
@@ -625,17 +635,39 @@
     </div>
 
     <script type="module" src="js/main.js"></script>
-<div id="insufficientFundsModal" class="modal-overlay" style="display: none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>&#9888; Insufficient Funds Alert</h3>
-            <button id="closeModalBtn" class="modal-close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p>After processing this payroll, the bank register balance is now <strong id="modalBalance" style="color: #dc3545;">$0.00</strong>.</p>
-            <p>Please ensure sufficient funds are available before the payday to avoid issues.</p>
+
+    <div id="insufficientFundsModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>&#9888; Insufficient Funds Alert</h3>
+                <button id="closeModalBtn" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>After processing this payroll, the bank register balance is now <strong id="modalBalance" style="color: #dc3545;">$0.00</strong>.</p>
+                <p>Please ensure sufficient funds are available before the payday to avoid issues.</p>
+            </div>
         </div>
     </div>
-</div>	
+
+    <div id="purgeTransactionsModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>&#9888; Purge Old Transactions</h3>
+                <button id="closePurgeModalBtn" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>This action will permanently delete all **reconciled** transactions on or before the selected date. This cannot be undone.</p>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label for="purgeCutoffDate" class="form-label">Delete all reconciled items on or before:</label>
+                    <input type="date" id="purgeCutoffDate" class="form-input" required>
+                </div>
+            </div>
+            <div style="text-align: right; margin-top: 20px;">
+                 <button type="button" class="btn btn-secondary" id="cancelPurgeBtn">Cancel</button>
+                 <button type="button" class="btn btn-danger" id="confirmPurgeBtn">Confirm Purge</button>
+            </div>
+        </div>
+    </div>
+	
 </body>
 </html>
