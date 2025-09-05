@@ -1,11 +1,3 @@
-/*
-  PayTrax Payroll Management
-  Copyright (c) 2025 greenwh
-
-  Developed by greenwh with substantial assistance from AI coding tools (Claude, ChatGPT, Gemini 2.5 Pro).
-  This file is original work based on documentation and prompts by greenwh.
-  Licensed under the MIT License.
-*/
 import { appData } from './state.js';
 
 /**

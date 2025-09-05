@@ -26,11 +26,13 @@ function handleTransactionFormSubmit(event) {
 }
 
 /**
- * Handles deleting a bank transaction from the register.
+ * Handles clicks within the bank register table body.
  * @param {Event} event - The click event.
  */
-function handleDeleteTransaction(event) {
+function handleRegisterClick(event) {
     const deleteButton = event.target.closest('.delete-transaction-btn');
+    const reconcileCheckbox = event.target.closest('.reconcile-checkbox');
+
     if (deleteButton) {
         // This confirmation will be made conditional in a future phase
         if (confirm('Are you sure you want to delete this transaction?')) {
@@ -40,10 +42,17 @@ function handleDeleteTransaction(event) {
             saveData();
         }
     }
+
+    if (reconcileCheckbox) {
+        const transId = reconcileCheckbox.dataset.id;
+        toggleTransactionReconciled(transId);
+        displayRegister(); // Re-render to apply styling
+        saveData();
+    }
 }
 
 
-// --- LOGIC FUNCTIONS (formerly in logic.js) ---
+// --- LOGIC FUNCTIONS ---
 
 /**
  * Adds a transaction to the bank register from the UI form.
@@ -73,7 +82,8 @@ export function addTransaction(date, description, type, amount, id = null, silen
         id: id || `trans_${new Date().getTime()}`,
         date, description, 
         debit: type === 'debit' ? amount : 0, 
-        credit: type === 'credit' ? amount : 0 
+        credit: type === 'credit' ? amount : 0,
+        reconciled: false // NEW: Default all new transactions to not reconciled
     });
 }
 
@@ -83,6 +93,17 @@ export function addTransaction(date, description, type, amount, id = null, silen
  */
 function deleteTransaction(transId) {
     appData.bankRegister = appData.bankRegister.filter(t => t.id !== transId);
+}
+
+/**
+ * Toggles the reconciled status of a specific transaction.
+ * @param {string} transId - The ID of the transaction to update.
+ */
+function toggleTransactionReconciled(transId) {
+    const transaction = appData.bankRegister.find(t => t.id === transId);
+    if (transaction) {
+        transaction.reconciled = !transaction.reconciled;
+    }
 }
 
 /**
@@ -136,7 +157,7 @@ export function getCurrentBankBalance() {
 }
 
 
-// --- UI FUNCTIONS (formerly in ui.js) ---
+// --- UI FUNCTIONS ---
 
 /**
  * Renders the bank register table from the appData.
@@ -152,11 +173,19 @@ export function displayRegister() {
     sortedRegister.forEach(trans => {
         balance += trans.credit - trans.debit;
         const row = document.createElement('tr');
+        // Add a 'reconciled' class to the row if the transaction is reconciled
+        if (trans.reconciled) {
+            row.classList.add('reconciled');
+        }
+
         row.innerHTML = `
             <td>${trans.date}</td><td>${trans.description}</td>
             <td class="debit">${trans.debit > 0 ? '$' + trans.debit.toFixed(2) : '-'}</td>
             <td class="credit">${trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-'}</td>
             <td>$${balance.toFixed(2)}</td>
+            <td style="text-align: center;">
+                <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}" ${trans.reconciled ? 'checked' : ''}>
+            </td>
             <td><button class="btn btn-danger btn-sm delete-transaction-btn" data-id="${trans.id}">Delete</button></td>
         `;
         tbody.appendChild(row);
@@ -211,7 +240,8 @@ export function hideInsufficientFundsModal() {
  */
 export function initBanking() {
     document.getElementById('transactionForm').addEventListener('submit', handleTransactionFormSubmit);
-    document.getElementById('bankRegisterBody').addEventListener('click', handleDeleteTransaction);
+    // Use a single delegated listener for the entire table body for efficiency
+    document.getElementById('bankRegisterBody').addEventListener('click', handleRegisterClick);
     document.getElementById('closeModalBtn').addEventListener('click', hideInsufficientFundsModal);
     document.getElementById('insufficientFundsModal').addEventListener('click', (event) => {
         if (event.target.id === 'insufficientFundsModal') {

@@ -324,6 +324,12 @@ body {
     background: #f8f9fa;
 }
 
+/* NEW: Style for reconciled transactions */
+.report-table tr.reconciled {
+    color: #6c757d;
+    background-color: #f8f9fa !important; /* Override even child rule */
+}
+
 .report-table .credit {
     color: #28a745;
 }

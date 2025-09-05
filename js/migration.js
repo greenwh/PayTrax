@@ -53,6 +53,22 @@ function migrateToV3(data) {
 }
 
 /**
+ * Migrates data to v4 by adding the 'reconciled' property to each bank transaction.
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV4(data) {
+    console.log("Running migration to v4...");
+    if (data.bankRegister && Array.isArray(data.bankRegister)) {
+        data.bankRegister.forEach(t => {
+            if (t.reconciled === undefined) {
+                t.reconciled = false;
+            }
+        });
+    }
+    data.version = 4; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -67,11 +83,14 @@ export function migrateData(data) {
             migrateToV2(data);
             // Fall-through is intentional
         case 2:
-            migrateToV3(data); // New case for version 3 migration
+            migrateToV3(data);
+            // Fall-through is intentional
+        case 3:
+            migrateToV4(data); // New case for version 4 migration
             // Fall-through is intentional for future migrations
             break; 
-        // case 3:
-        //     migrateToV4(data); // Add future migrations here
+        // case 4:
+        //     migrateToV5(data); // Add future migrations here
         //     break; 
         // ...and so on.
     }

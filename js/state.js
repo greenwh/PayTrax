@@ -11,7 +11,7 @@ import * as db from './db.js';
 
 // --- CONFIGURATION & DEFAULT STATE ---
 
-export const CURRENT_VERSION = 3; // Incremented from 2 to 3
+export const CURRENT_VERSION = 4; // Incremented from 3 to 4
 
 // Constants for tax calculations
 export const SS_WAGE_BASE = 168600;
@@ -122,6 +122,14 @@ export async function loadData() {
         }
         if (appData.settings.daysUntilPayday === undefined) {
             appData.settings.daysUntilPayday = 5;
+        }
+        // Gracefully handle the 'reconciled' property for data loaded from browser storage
+        if (appData.bankRegister && Array.isArray(appData.bankRegister)) {
+            appData.bankRegister.forEach(t => {
+                if (t.reconciled === undefined) {
+                    t.reconciled = false;
+                }
+            });
         }
     } else {
         // Use a deep copy of the default data if nothing is found anywhere
