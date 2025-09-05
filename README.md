@@ -75,4 +75,14 @@ Contributions are welcome! If you'd like to help improve **PayTrax**, please for
 
 ## License
 
-This project is open-source and available under the [MIT License](https://opensource.org/licenses/MIT).
+## Copyright & AI Attribution
+
+Copyright (c) 2025 greenwh
+
+This software was developed by greenwh, with substantial assistance from AI coding tools (Claude, ChatGPT, Gemini 2.5 Pro). Development was based on original documentation, spreadsheets, and workflow prompts created by greenwh. No third-party code or assets have been included unless otherwise noted.
+
+**AI Workflow:**  
+Development involved iterative prompting to multiple AI coding platforms, resulting in modular, original code. The overall application logic, structure, and idea are original to greenwh.
+
+If you use or modify this code, please retain this attribution.
+
