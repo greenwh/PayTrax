@@ -213,45 +213,6 @@ export function renderEmployeeFormForEdit(employeeId) {
 }
 
 /**
- * Renders the bank register table from the appData.
- */
-export function displayRegister() {
-    const tbody = document.getElementById('bankRegisterBody');
-    tbody.innerHTML = '';
-    let balance = 0;
-    
-    // Sort transactions by date before rendering
-    const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    sortedRegister.forEach(trans => {
-        balance += trans.credit - trans.debit;
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${trans.date}</td><td>${trans.description}</td>
-            <td class="debit">${trans.debit > 0 ? '$' + trans.debit.toFixed(2) : '-'}</td>
-            <td class="credit">${trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-'}</td>
-            <td>$${balance.toFixed(2)}</td>
-            <td><button class="btn btn-danger btn-sm delete-transaction-btn" data-id="${trans.id}">Delete</button></td>
-        `;
-        tbody.appendChild(row);
-    });
-    
-    const currentBalanceEl = document.getElementById('currentBalance');
-    currentBalanceEl.textContent = `$${balance.toFixed(2)}`;
-    currentBalanceEl.style.color = balance >= 0 ? '#28a745' : '#dc3545';
-}
-
-/**
- * Updates the bank fund projection widgets on the dashboard.
- */
-export function updateBankProjectionsUI() {
-    const { thisMonthRequired, nextMonthRequired, avgHours } = logic.getBankProjections();
-    document.getElementById('thisMonthRequired').textContent = thisMonthRequired.toFixed(2);
-    document.getElementById('nextMonthRequired').textContent = nextMonthRequired.toFixed(2);
-    document.getElementById('projectedHours').textContent = avgHours.toFixed(1);
-}
-
-/**
  * Renders the pay stub UI based on the current employee and period.
  * @param {string} employeeId - The ID of the current employee.
  * @param {string} periodNum - The current pay period number.
@@ -427,29 +388,4 @@ export function printPayStub() {
     </style></head><body><div class="paystub">${printContent}</div></body></html>`);
     printWindow.document.close();
     printWindow.print();
-}
-/**
- * Displays an alert modal for insufficient bank funds.
- * @param {number} balance - The current negative balance.
- */
-export function showInsufficientFundsModal(balance) {
-    const modal = document.getElementById('insufficientFundsModal');
-    const balanceEl = document.getElementById('modalBalance');
-    if (modal && balanceEl) {
-        balanceEl.textContent = `$${balance.toFixed(2)}`;
-        modal.style.display = 'flex'; // Use flex for centering
-        setTimeout(() => modal.classList.add('visible'), 10); // Trigger transition
-    }
-}
-
-/**
- * Hides the insufficient funds modal.
- */
-export function hideInsufficientFundsModal() {
-    const modal = document.getElementById('insufficientFundsModal');
-    if (modal) {
-        modal.classList.remove('visible');
-        // Wait for transition to finish before hiding
-        setTimeout(() => modal.style.display = 'none', 300);
-    }
 }

@@ -12,6 +12,7 @@
 import { loadData, saveData } from './state.js';
 import * as ui from './ui.js';
 import * as logic from './logic.js';
+import * as banking from './banking.js'; // Import the new banking module
 import { importData, exportData } from './data-io.js';
 
 // --- EVENT HANDLER FUNCTIONS ---
@@ -71,12 +72,12 @@ function handleHoursChange() {
     const periodNum = document.getElementById('currentPeriod').value;
     ui.updateDashboardUI(employeeId, periodNum);
     ui.displayPayPeriods(employeeId);
-    ui.updateBankProjectionsUI();
-    ui.displayRegister();
+    banking.updateBankProjectionsUI(); // Delegated to banking module
+    banking.displayRegister(); // Delegated to banking module
     saveData();
-    const currentBalance = logic.getCurrentBankBalance();
+    const currentBalance = banking.getCurrentBankBalance(); // Delegated
     if (currentBalance < 0) {
-        ui.showInsufficientFundsModal(currentBalance);
+        banking.showInsufficientFundsModal(currentBalance); // Delegated
     }
 }
 
@@ -126,32 +127,6 @@ function handleGeneratePayStub() {
     ui.showTab('paystub', document.querySelector('[data-tab="paystub"]'));
 }
 
-/**
- * Handles the submission of a new bank transaction.
- * @param {Event} event - The form submission event.
- */
-function handleTransactionFormSubmit(event) {
-    event.preventDefault();
-    logic.addTransactionFromForm();
-    ui.displayRegister();
-    saveData();
-    document.getElementById('transactionForm').reset();
-}
-
-/**
- * Handles deleting a bank transaction from the register.
- * @param {Event} event - The click event.
- */
-function handleDeleteTransaction(event) {
-    const deleteButton = event.target.closest('.delete-transaction-btn');
-    if (deleteButton && confirm('Are you sure you want to delete this transaction?')) {
-        const transId = deleteButton.dataset.id;
-        logic.deleteTransaction(transId);
-        ui.displayRegister();
-        saveData();
-    }
-}
-
 // --- INITIALIZATION ---
 
 /**
@@ -193,21 +168,11 @@ function setupEventListeners() {
     });
     
     document.getElementById('generateReportBtn').addEventListener('click', ui.renderReportUI);
-
-    // Banking
-    document.getElementById('transactionForm').addEventListener('submit', handleTransactionFormSubmit);
-    document.getElementById('bankRegisterBody').addEventListener('click', handleDeleteTransaction);
     
     // Pay Stub
     document.getElementById('printPayStubBtn').addEventListener('click', ui.printPayStub);
 
-    // Modal closing
-    document.getElementById('closeModalBtn').addEventListener('click', ui.hideInsufficientFundsModal);
-    document.getElementById('insufficientFundsModal').addEventListener('click', (event) => {
-        if (event.target.id === 'insufficientFundsModal') {
-            ui.hideInsufficientFundsModal();
-        }
-    });
+    // Banking event listeners are now handled within the banking module
 }
 
 /**
@@ -218,10 +183,11 @@ async function init() {
     ui.displaySettings();
     ui.populateEmployeeDropdowns();
     logic.generatePayPeriods(); // This modifies state based on loaded settings
-    ui.displayRegister();
+    banking.displayRegister(); // Delegated to banking module
     ui.toggleReportInputs();
-    ui.updateBankProjectionsUI();
+    banking.updateBankProjectionsUI(); // Delegated to banking module
     setupEventListeners();
+    banking.initBanking(); // Initialize event listeners for the banking module
     handleEmployeeChange(); // Set initial dashboard state
 }
 
