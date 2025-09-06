@@ -1,10 +1,12 @@
 /*
   PayTrax Payroll Management
-  Copyright (c) 2025 greenwh
+  Copyright (c) 2025 greenwh. All Rights Reserved.
 
-  Developed by greenwh with substantial assistance from AI coding tools (Claude, ChatGPT, Gemini 2.5 Pro).
-  This file is original work based on documentation and prompts by greenwh.
-  Licensed under the MIT License.
+  This software is the proprietary property of greenwh.
+  You may not copy, modify, distribute, or sell this software without explicit
+  written permission from the copyright holder.
+
+  Developed by greenwh with substantial assistance from AI coding tools.
 */
 import { appData } from './state.js';
 
