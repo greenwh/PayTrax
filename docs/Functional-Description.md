@@ -48,4 +48,4 @@ This module functions as a comprehensive bank register.
     *   **Purge:** A safe mechanism allows the user to permanently delete all reconciled transactions up to a chosen date, helping to keep the register manageable over time.
     
 ---
-Copyright (c) 2025 greenwh. All Rights Reserved.
+Copyright (c) 2025 greenwh. Licensed under the [MIT License](../LICENSE).

@@ -92,4 +92,4 @@ To ensure backward compatibility with older data backups, the application uses a
     }
 
 ---
-Copyright (c) 2025 greenwh. All Rights Reserved.
+Copyright (c) 2025 greenwh. Licensed under the [MIT License](../LICENSE).

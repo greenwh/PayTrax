@@ -68,20 +68,12 @@ Because **PayTrax** is a fully client-side application, getting started is incre
     ```
     Then, open your browser and navigate to `http://localhost:8000`.
 
-## Basic Usage Workflow
+## License & AI Attribution
 
-1.  Navigate to the **Settings** tab. Fill out your Company Settings, Tax Settings, and add your first employee in the Employee Management section.
-2.  Go to the **Dashboard** tab.
-3.  Select the employee you just created from the dropdown menu.
-4.  Select a pay period and enter the hours worked.
-5.  All calculations will update instantly. You can then generate a pay stub or view the updated reports.
+Copyright (c) 2025 greenwh
 
-## License & Copyright
+This software is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
 
-**Copyright (c) 2025 greenwh. All Rights Reserved.**
+This software was developed by greenwh, with substantial assistance from AI coding tools (Claude, ChatGPT, Gemini). Development was based on original documentation, spreadsheets, and workflow prompts created by greenwh.
 
-This is proprietary software. You may not use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software without the express written permission of the copyright holder.
-
-#### AI Attribution
-
-This software was developed by greenwh, with substantial assistance from AI coding tools. Development was based on original documentation, spreadsheets, and workflow prompts created by greenwh.
+If you use or modify this code, please retain this attribution.

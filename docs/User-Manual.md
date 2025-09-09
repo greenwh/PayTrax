@@ -67,4 +67,4 @@ This tab features a simple bank register to help you track your business bank ac
     *   You can manually delete any single transaction using the "Delete" button.````
 
 ---
-Copyright (c) 2025 greenwh. All Rights Reserved.
+Copyright (c) 2025 greenwh. Licensed under the [MIT License](../LICENSE).

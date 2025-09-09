@@ -30,4 +30,4 @@ Time to calculate a paycheck!
 5.  That's it! The payroll is calculated and saved. You can now view the details in the `Pay Periods` tab or generate a formal payslip from the `Pay Stub` tab.
 
 ---
-Copyright (c) 2025 greenwh. All Rights Reserved.
+Copyright (c) 2025 greenwh. Licensed under the [MIT License](../LICENSE).
