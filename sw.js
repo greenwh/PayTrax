@@ -10,7 +10,7 @@ const CACHE_NAME = 'paytrax-cache-v1';
 // This list should include all the files that make up the application's shell.
 const urlsToCache = [
   './',
-  './PayTrax.html',
+  './index.html',
   './style.css',
   './js/main.js',
   './js/state.js',

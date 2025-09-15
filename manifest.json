@@ -2,7 +2,7 @@
   "name": "PayTrax Payroll Management",
   "short_name": "PayTrax",
   "description": "A client-side payroll management system for small businesses.",
-  "start_url": "./PayTrax.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2c3e50",
