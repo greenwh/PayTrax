@@ -79,6 +79,7 @@ export function generateBasePayPeriods() {
 
 /**
  * Generates pay periods for all employees, preserving existing data where possible.
+ * After generating, recalculates all periods in sequence to ensure tax remainders are correct.
  */
 export function generatePayPeriods() {
     const basePeriods = generateBasePayPeriods();
@@ -92,7 +93,133 @@ export function generatePayPeriods() {
             }
             return { ...newPeriod };
         });
+
+        // After preserving old data, recalculate all periods in sequence to fix remainders
+        recalculateAllPeriodsForEmployee(emp.id);
     });
+}
+
+/**
+ * Recalculates all pay periods for an employee in strict chronological sequence
+ * to ensure tax remainders accumulate correctly.
+ * This is critical for the running remainder strategy to work properly.
+ * @param {string} employeeId - The ID of the employee
+ */
+export function recalculateAllPeriodsForEmployee(employeeId) {
+    const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
+    if (employeeIndex === -1) return;
+
+    const employee = appData.employees[employeeIndex];
+    const periods = appData.payPeriods[employeeId] || [];
+
+    // Reset tax remainders to start fresh
+    employee.taxRemainders = {
+        federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0
+    };
+
+    // Sort periods by period number to ensure sequential processing
+    const sortedPeriods = periods.slice().sort((a, b) => a.period - b.period);
+
+    // Recalculate each period in sequence
+    sortedPeriods.forEach(period => {
+        const totalHours = period.hours ? Object.values(period.hours).reduce((a, b) => a + b, 0) : 0;
+
+        // Only recalculate periods that have hours entered
+        if (totalHours > 0) {
+            recalculatePeriod(employeeId, period.period);
+        }
+    });
+}
+
+/**
+ * Recalculates a single pay period using the hours already stored in that period.
+ * This function does NOT read from UI - it uses stored period data.
+ * Used by recalculateAllPeriodsForEmployee to process periods sequentially.
+ * @param {string} employeeId - The ID of the employee
+ * @param {number} periodNum - The period number to recalculate
+ */
+function recalculatePeriod(employeeId, periodNum) {
+    const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
+    if (employeeIndex === -1) return;
+
+    const employee = appData.employees[employeeIndex];
+    const period = appData.payPeriods[employeeId].find(p => p.period == periodNum);
+    if (!period || !period.hours) return;
+
+    // Ensure taxRemainders object exists
+    if (!employee.taxRemainders) {
+        employee.taxRemainders = { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
+    }
+
+    const hours = period.hours; // Use existing hours from the period
+
+    const earnings = {
+        regular: hours.regular * employee.rate,
+        overtime: hours.overtime * employee.rate * employee.overtimeMultiplier,
+        holiday: hours.holiday * employee.rate * employee.holidayMultiplier,
+        pto: hours.pto * employee.rate
+    };
+
+    const grossPay = Object.values(earnings).reduce((sum, val) => sum + val, 0);
+    const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
+
+    // Running Remainder Calculation Logic
+    const unrounded = {};
+    const rounded = {};
+    const newRemainders = {};
+
+    const calculateTaxWithRemainder = (taxName, calculation) => {
+        const previousRemainder = employee.taxRemainders[taxName] || 0;
+        unrounded[taxName] = calculation;
+        const totalToConsider = unrounded[taxName] + previousRemainder;
+        // Round half up for currency (not banker's rounding)
+        rounded[taxName] = Math.round(totalToConsider * 100) / 100;
+        newRemainders[taxName] = totalToConsider - rounded[taxName];
+    };
+
+    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));
+    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));
+    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));
+    calculateTaxWithRemainder('fica', grossPay * (socialSecurity / 100));
+    calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));
+    calculateTaxWithRemainder('suta', grossPay * (sutaRate / 100));
+    calculateTaxWithRemainder('futa', grossPay * (futaRate / 100));
+
+    // Update the employee's stored remainders for the next pay run
+    appData.employees[employeeIndex].taxRemainders = newRemainders;
+
+    const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
+    const netPay = grossPay - employeeTaxes;
+
+    // PTO Calculation (preserve existing PTO logic)
+    const originalPtoUsed = period.hours.pto || 0;
+    const originalPtoAccrued = period.ptoAccrued || 0;
+    let ptoAccruedThisPeriod = 0;
+    let currentPtoBalance = (employee.ptoBalance + originalPtoUsed) - originalPtoAccrued;
+    const totalOriginalHours = Object.values(period.hours).reduce((a, b) => a + b, 0);
+
+    if (totalOriginalHours === 0 && (hours.regular > 0 || hours.overtime > 0)) {
+        const periodsInYear = (appData.payPeriods[employeeId] || []).length;
+        if (periodsInYear > 0) ptoAccruedThisPeriod = employee.ptoAccrualRate / periodsInYear;
+    } else {
+        ptoAccruedThisPeriod = originalPtoAccrued;
+    }
+    appData.employees[employeeIndex].ptoBalance = parseFloat(((currentPtoBalance + ptoAccruedThisPeriod) - hours.pto).toFixed(2));
+
+    // Update Period Data
+    period.earnings = earnings;
+    period.grossPay = grossPay;
+    period.netPay = netPay;
+    period.ptoAccrued = ptoAccruedThisPeriod;
+    period.taxes = { ...rounded, total: employeeTaxes, unrounded };
+
+    // Update Bank Register
+    const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
+    const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;
+    appData.bankRegister = appData.bankRegister.filter(t => t.id !== transactionId);
+    if (totalPayrollCost > 0) {
+        addTransaction(period.payDate, `Payroll: ${employee.name} - P${period.period}`, 'debit', totalPayrollCost, transactionId, true);
+    }
 }
 
 /**
@@ -116,27 +243,68 @@ export function updateHoursFromPeriod(employeeId, periodNum) {
     document.getElementById('overtimeHours').value = period.hours.overtime > 0 ? period.hours.overtime : '';
     document.getElementById('ptoHours').value = period.hours.pto > 0 ? period.hours.pto : '';
     document.getElementById('holidayHours').value = period.hours.holiday > 0 ? period.hours.holiday : '';
-    
+
     return true; // Indicate that a recalculation should happen
 }
 
 /**
  * Calculates pay based on the hours in the UI and updates the appData object.
  * This function now uses a "running remainder" strategy for tax calculations.
+ * If editing an earlier period, it will trigger sequential recalculation of all subsequent periods.
  */
 export function calculatePay() {
     const employeeId = document.getElementById('currentEmployee').value;
-    const periodNum = document.getElementById('currentPeriod').value;
-    
+    const periodNum = parseInt(document.getElementById('currentPeriod').value);
+
     if (!employeeId || !periodNum) return;
 
     const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
     if (employeeIndex === -1) return;
-    
+
     const employee = appData.employees[employeeIndex];
     const period = appData.payPeriods[employeeId].find(p => p.period == periodNum);
     if (!period) return;
-    
+
+    // Detect if we're editing an earlier period with subsequent periods already calculated
+    const allPeriods = appData.payPeriods[employeeId] || [];
+    const hasLaterPeriodsWithData = allPeriods.some(p => {
+        const laterPeriod = p.period > periodNum;
+        const hasHours = p.hours && Object.values(p.hours).reduce((a, b) => a + b, 0) > 0;
+        return laterPeriod && hasHours;
+    });
+
+    // Store the hours from UI into the period first
+    period.hours = {
+        regular: parseFloat(document.getElementById('regularHours').value) || 0,
+        overtime: parseFloat(document.getElementById('overtimeHours').value) || 0,
+        pto: parseFloat(document.getElementById('ptoHours').value) || 0,
+        holiday: parseFloat(document.getElementById('holidayHours').value) || 0,
+    };
+
+    // If editing an earlier period, recalculate everything from Period 1 forward
+    if (hasLaterPeriodsWithData) {
+        recalculateAllPeriodsForEmployee(employeeId);
+    } else {
+        // Otherwise, just calculate this single period normally
+        recalculateSinglePeriodFromUI(employeeId, periodNum);
+    }
+}
+
+/**
+ * Calculates a single pay period using data from the UI inputs.
+ * This is the original calculation logic, now extracted into its own function.
+ * Only use this when you're certain no sequential recalculation is needed.
+ * @param {string} employeeId - The ID of the employee
+ * @param {number} periodNum - The period number to calculate
+ */
+function recalculateSinglePeriodFromUI(employeeId, periodNum) {
+    const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
+    if (employeeIndex === -1) return;
+
+    const employee = appData.employees[employeeIndex];
+    const period = appData.payPeriods[employeeId].find(p => p.period == periodNum);
+    if (!period) return;
+
     // Ensure taxRemainders object exists for backward compatibility
     if (!employee.taxRemainders) {
         employee.taxRemainders = { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
@@ -155,7 +323,7 @@ export function calculatePay() {
         holiday: hours.holiday * employee.rate * employee.holidayMultiplier,
         pto: hours.pto * employee.rate
     };
-    
+
     const grossPay = Object.values(earnings).reduce((sum, val) => sum + val, 0);
     const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
 
@@ -165,14 +333,16 @@ export function calculatePay() {
     const newRemainders = {};
 
     // Helper function to process each tax by carrying forward the remainder from the previous payroll
+    // Uses proper currency rounding (round half up) instead of JavaScript's banker's rounding
     const calculateTaxWithRemainder = (taxName, calculation) => {
         const previousRemainder = employee.taxRemainders[taxName] || 0;
         unrounded[taxName] = calculation;
         const totalToConsider = unrounded[taxName] + previousRemainder;
-        rounded[taxName] = parseFloat(totalToConsider.toFixed(2));
+        // Round half up for currency (not banker's rounding)
+        rounded[taxName] = Math.round(totalToConsider * 100) / 100;
         newRemainders[taxName] = totalToConsider - rounded[taxName];
     };
-    
+
     calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));
     calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));
     calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));
@@ -183,10 +353,10 @@ export function calculatePay() {
 
     // Update the employee's stored remainders for the next pay run
     appData.employees[employeeIndex].taxRemainders = newRemainders;
-    
+
     const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
     const netPay = grossPay - employeeTaxes;
-    
+
     // --- PTO Calculation (remains the same) ---
     const originalPtoUsed = period.hours.pto || 0;
     const originalPtoAccrued = period.ptoAccrued || 0;
@@ -208,7 +378,7 @@ export function calculatePay() {
     period.netPay = netPay;
     period.ptoAccrued = ptoAccruedThisPeriod;
     period.taxes = { ...rounded, total: employeeTaxes, unrounded };
-    
+
     // --- Update Bank Register ---
     const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
     const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;

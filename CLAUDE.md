@@ -99,11 +99,11 @@ Single module import triggers entire app initialization. Service Worker is regis
 
 | Feature | Primary Module | Key Functions |
 |---------|---|---|
-| Payroll Calculations | `logic.js` | `calculateGrossPay()`, `calculateNetPay()`, `calculateTaxes()` |
+| Payroll Calculations | `logic.js` | `calculatePay()`, `recalculatePeriod()`, `recalculateAllPeriodsForEmployee()` |
 | Pay Period Generation | `logic.js` | `generatePayPeriods()` (weekly, bi-weekly, semi-monthly, annual) |
-| Employee Management | `logic.js` | `addEmployee()`, `updateEmployee()`, `removeEmployee()` |
-| Pay Stubs | `logic.js` + `ui.js` | `generatePayStub()` (HTML printable format) |
-| Tax Reporting | `logic.js` | `generateW2Report()`, `generate941Data()`, `generate940Data()` |
+| Employee Management | `logic.js` | `saveEmployeeFromForm()`, `deleteEmployee()` |
+| Pay Stubs | `logic.js` + `ui.js` | `getPayStubData()` (HTML printable format) |
+| Tax Reporting | `logic.js` | `generateW2Report()`, `generate941Report()`, `generate940Report()`, `generateTaxDepositReport()` |
 | Bank Register | `banking.js` | `addTransaction()`, `reconcileTransaction()`, `filterTransactions()`, CSV export |
 | Import/Export | `data-io.js` | `importData()`, `exportData()` (with version checking) |
 | Backward Compatibility | `migration.js` | Handles v1→v4 data migration sequentially |
@@ -151,7 +151,9 @@ Old backups are automatically migrated when imported. The migration flow in `mig
 1. Implement calculation in `logic.js` (use existing tax functions as reference)
 2. Store tax rates in `appData.settings`
 3. Add UI controls in `index.html` for input
-4. Call calculation from `logic.js::calculatePayPeriod()` or similar
+4. Add the new tax to the running remainder logic in `calculatePay()` and `recalculatePeriod()`
+5. Ensure the tax is added to the employee's `taxRemainders` object initialization
+6. **CRITICAL:** Use `Math.round(totalToConsider * 100) / 100` for rounding, NOT `toFixed(2)` or banker's rounding
 
 ### Exporting New Report Format
 1. Add export function to `data-io.js` or `banking.js`
@@ -176,7 +178,14 @@ Since there's no automated test framework, testing is manual:
 ### Fractional Cent Tracking (taxRemainders)
 - Payroll calculations can produce fractional cents due to rounding
 - `taxRemainders` object tracks these for each employee and tax type
-- See `logic.js::calculateTaxes()` for implementation
+- **Running Remainder Strategy:** Fractional cents carry forward from one pay period to the next
+- **Critical Requirement:** Pay periods MUST be calculated in strict chronological sequence (Period 1→2→3...)
+- **Automatic Safeguards:**
+  - `generatePayPeriods()` triggers sequential recalculation after settings changes
+  - `calculatePay()` detects editing of earlier periods and triggers full recalculation
+  - `recalculateAllPeriodsForEmployee()` resets remainders and processes periods sequentially
+- **Rounding Method:** Uses standard currency rounding (`Math.round(x * 100) / 100`) NOT banker's rounding
+- See `logic.js::calculatePay()` and `logic.js::recalculateAllPeriodsForEmployee()` for implementation
 
 ### Pay Period Generation
 - Generated from `appData.settings.firstPayPeriodStartDate` and `payFrequency`
