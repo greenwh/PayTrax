@@ -8,7 +8,7 @@ PayTrax is a standalone, browser-based payroll management system designed for sm
 **Project**: Client-Side Payroll Management System
 **Current Status**: Production Ready, Maintenance Mode
 **Date Created**: September 25, 2025
-**Last Updated**: October 4, 2025
+**Last Updated**: October 19, 2025
 
 ## Architecture Overview
 ```
@@ -140,6 +140,7 @@ PayTrax/
 3. **Graceful Data Persistence**: IndexedDB primary, localStorage fallback
 4. **Built-in Migration System**: Handles data structure updates seamlessly
 5. **Event-Driven Calculations**: Responsive UI with real-time updates
+6. **Robust Tax Calculations**: Implemented standard currency rounding and sequential calculation safeguards to ensure accurate and reliable tax computations.
 
 ### Security & Privacy
 - **100% Client-Side**: No server communication required
@@ -249,11 +250,11 @@ PayTrax/
 
 ### Last 5 Commits
 ```
-d26aeae - Truncated index.html in last commit (Sep 15)
-73bc1c6 - Added a docs link (Sep 15)
-3f2791e - Renamed PayTrax.html to index.html for github pages (Sep 15)
-ca14531 - Converted to PWA (Sep 9)
-6bf7061 - Reverted back to MIT (license change)
+96bcc5b - increment sw.js version (Oct 19)
+55e943d - fix: correct tax rounding and enforce sequential pay period calculation (Oct 19)
+3ea1839 - docs (Oct 19)
+dd43d24 - updated context (Oct 13)
+29b601c - new icon (Oct 7)
 ```
 
 ### Major Updates (September 2025)
@@ -263,14 +264,14 @@ ca14531 - Converted to PWA (Sep 9)
 4. **Service Worker**: Added SW for offline functionality
 5. **License**: Settled on MIT license
 
-### Current State (October 2025)
-**Uncommitted Changes**: 18 files modified (all core application files)
-- HTML, CSS, manifest, service worker
-- All JS modules (main, state, logic, banking, ui, db, data-io, migration, utils)
-- All documentation files (Developer-Guide, Functional-Description, Quick-Start, User-Manual, index)
-- LICENSE, README
+### Major Updates (October 2025)
+1.  **Critical Tax Calculation Fix**: Corrected a rounding error in tax calculations by replacing `toFixed()` with `Math.round()` to ensure standard currency rounding.
+2.  **Sequential Pay Period Calculation**: Implemented a feature to enforce sequential pay period calculations, which is critical for the accuracy of the running remainder tax calculation strategy.
+3.  **Automatic Recalculation**: Added intelligent detection for out-of-order edits, triggering an automatic recalculation of all pay periods to maintain data integrity.
 
-**Project Health**: Production-ready with extensive uncommitted refinements.
+### Current State (October 2025)
+**Uncommitted Changes**: No uncommitted changes.
+**Project Health**: Production-ready and up-to-date.
 
 **Todo Items** (10): Deductions, Data Validation, Help system, UI improvements, CSV export
 
