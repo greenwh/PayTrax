@@ -961,6 +961,250 @@ export function generate940Report(yearStr) {
     `;
 }
 
+// --- CSV EXPORT FUNCTIONS ---
+
+/**
+ * Exports W-2 report data to CSV
+ * @param {string} yearStr - The year for the report
+ * @returns {void} - Downloads CSV file
+ */
+export function exportW2ReportToCSV(yearStr) {
+    const year = parseInt(yearStr) || appData.settings.taxYear;
+    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+
+    let csvContent = "Employee Name,Employee ID,Wages,Federal Tax,FICA,Medicare,SS Wages,State Tax,Local Tax\n";
+
+    appData.employees.forEach(emp => {
+        const periodsInYear = (appData.payPeriods[emp.id] || []).filter(p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0);
+        if (periodsInYear.length === 0) return;
+
+        let totals = { gross: 0, federal: 0, fica: 0, medicare: 0, state: 0, local: 0 };
+        let ssWages = 0;
+
+        periodsInYear.forEach(p => {
+            const grossBeforeThisPeriod = ssWages;
+            if (grossBeforeThisPeriod < ssWageBase) {
+                ssWages += Math.min(p.grossPay, ssWageBase - grossBeforeThisPeriod);
+            }
+            totals.gross += p.grossPay;
+            totals.federal += p.taxes.federal;
+            totals.fica += p.taxes.fica;
+            totals.medicare += p.taxes.medicare;
+            totals.state += p.taxes.state;
+            totals.local += p.taxes.local;
+        });
+
+        const row = [
+            `"${emp.name}"`,
+            `"${emp.idNumber}"`,
+            totals.gross.toFixed(2),
+            totals.federal.toFixed(2),
+            totals.fica.toFixed(2),
+            totals.medicare.toFixed(2),
+            ssWages.toFixed(2),
+            totals.state.toFixed(2),
+            totals.local.toFixed(2)
+        ].join(',');
+        csvContent += row + "\n";
+    });
+
+    downloadCSV(csvContent, `PayTrax_W2_Report_${year}.csv`);
+}
+
+/**
+ * Exports 941 report data to CSV
+ * @param {string} periodStr - The quarter for the report (e.g., "Q1 2025")
+ * @returns {void} - Downloads CSV file
+ */
+export function export941ReportToCSV(periodStr) {
+    const { start, end, title } = parseDateInput(periodStr, 'quarterly');
+    if (!start) {
+        alert('Invalid period. Use format "Q1 2025".');
+        return;
+    }
+
+    const allPayPeriodsInQuarter = [].concat.apply([], Object.values(appData.payPeriods))
+        .filter(p => {
+            const payDate = new Date(p.payDate);
+            return payDate >= start && payDate <= end && p.grossPay > 0;
+        });
+
+    if (allPayPeriodsInQuarter.length === 0) {
+        alert('No payroll data for this period.');
+        return;
+    }
+
+    let csvContent = "Description,Amount\n";
+    csvContent += `"Report Period","${title}"\n`;
+
+    let totalWages = 0, totalFederal = 0, totalFICA = 0, totalMedicare = 0;
+
+    allPayPeriodsInQuarter.forEach(p => {
+        totalWages += p.grossPay;
+        totalFederal += p.taxes.federal;
+        totalFICA += p.taxes.fica * 2;
+        totalMedicare += p.taxes.medicare * 2;
+    });
+
+    csvContent += `"Total Wages","${totalWages.toFixed(2)}"\n`;
+    csvContent += `"Federal Income Tax Withheld","${totalFederal.toFixed(2)}"\n`;
+    csvContent += `"Social Security Tax","${totalFICA.toFixed(2)}"\n`;
+    csvContent += `"Medicare Tax","${totalMedicare.toFixed(2)}"\n`;
+    csvContent += `"Total Tax Liability","${(totalFederal + totalFICA + totalMedicare).toFixed(2)}"\n`;
+
+    downloadCSV(csvContent, `PayTrax_941_Report_${periodStr.replace(/\s+/g, '_')}.csv`);
+}
+
+/**
+ * Exports 940 report data to CSV
+ * @param {string} yearStr - The year for the report
+ * @returns {void} - Downloads CSV file
+ */
+export function export940ReportToCSV(yearStr) {
+    const year = parseInt(yearStr) || appData.settings.taxYear;
+    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
+    const futaRate = appData.settings.futaRate / 100;
+
+    const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods));
+    const periodsInYear = allPayPeriods.filter(p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0);
+
+    if (periodsInYear.length === 0) {
+        alert('No payroll data for this year.');
+        return;
+    }
+
+    let totalWages = 0, excessWages = 0, totalFUTA = 0;
+
+    appData.employees.forEach(emp => {
+        let ytdFUTAWages = 0;
+        const empPayPeriods = (appData.payPeriods[emp.id] || []).filter(p => new Date(p.payDate).getFullYear() === year).sort((a,b) => a.period - b.period);
+
+        empPayPeriods.forEach(p => {
+            if (p.grossPay <= 0) return;
+
+            totalWages += p.grossPay;
+
+            const wagesThisPeriod = p.grossPay;
+            let taxableFUTAWagesThisPeriod = 0;
+            if (ytdFUTAWages < futaWageBase) {
+                taxableFUTAWagesThisPeriod = Math.min(wagesThisPeriod, futaWageBase - ytdFUTAWages);
+            }
+            ytdFUTAWages += wagesThisPeriod;
+            totalFUTA += taxableFUTAWagesThisPeriod * futaRate;
+        });
+
+        if (ytdFUTAWages > futaWageBase) {
+            excessWages += ytdFUTAWages - futaWageBase;
+        }
+    });
+
+    const taxableWages = totalWages - excessWages;
+
+    let csvContent = "Description,Amount\n";
+    csvContent += `"Tax Year","${year}"\n`;
+    csvContent += `"Total Payments to Employees","${totalWages.toFixed(2)}"\n`;
+    csvContent += `"Payments Exceeding FUTA Wage Base","${excessWages.toFixed(2)}"\n`;
+    csvContent += `"Taxable FUTA Wages","${taxableWages.toFixed(2)}"\n`;
+    csvContent += `"FUTA Tax","${totalFUTA.toFixed(2)}"\n`;
+
+    downloadCSV(csvContent, `PayTrax_940_Report_${year}.csv`);
+}
+
+/**
+ * Exports custom date range employee report to CSV
+ * @param {string} startDateStr - Start date
+ * @param {string} endDateStr - End date
+ * @param {string} employeeId - Employee ID or "all"
+ * @returns {void} - Downloads CSV file
+ */
+export function exportDateRangeEmployeeReportToCSV(startDateStr, endDateStr, employeeId) {
+    const start = new Date(startDateStr + 'T00:00:00');
+    const end = new Date(endDateStr + 'T23:59:59');
+
+    const employeesToReport = employeeId === 'all'
+        ? appData.employees
+        : appData.employees.filter(e => e.id === employeeId);
+
+    let csvContent = "Employee Name,Employee ID,Regular Hours,Overtime Hours,Holiday Hours,PTO Hours,Total Hours,Regular Pay,Overtime Pay,Holiday Pay,PTO Pay,Gross Pay,Federal Tax,FICA,Medicare,State Tax,Local Tax,Deductions,Net Pay\n";
+
+    employeesToReport.forEach(emp => {
+        const periods = (appData.payPeriods[emp.id] || []).filter(p => {
+            const payDate = new Date(p.payDate);
+            return payDate >= start && payDate <= end && p.grossPay > 0;
+        });
+
+        if (periods.length === 0) return;
+
+        let totals = {
+            regHours: 0, otHours: 0, holHours: 0, ptoHours: 0,
+            regular: 0, overtime: 0, holiday: 0, pto: 0,
+            gross: 0, federal: 0, fica: 0, medicare: 0, state: 0, local: 0,
+            deductions: 0, net: 0
+        };
+
+        periods.forEach(p => {
+            totals.regHours += p.hours.regular || 0;
+            totals.otHours += p.hours.overtime || 0;
+            totals.holHours += p.hours.holiday || 0;
+            totals.ptoHours += p.hours.pto || 0;
+            totals.regular += p.earnings.regular || 0;
+            totals.overtime += p.earnings.overtime || 0;
+            totals.holiday += p.earnings.holiday || 0;
+            totals.pto += p.earnings.pto || 0;
+            totals.gross += p.grossPay;
+            totals.federal += p.taxes.federal;
+            totals.fica += p.taxes.fica;
+            totals.medicare += p.taxes.medicare;
+            totals.state += p.taxes.state;
+            totals.local += p.taxes.local;
+            totals.deductions += p.totalDeductions || 0;
+            totals.net += p.netPay;
+        });
+
+        const row = [
+            `"${emp.name}"`,
+            `"${emp.idNumber}"`,
+            totals.regHours.toFixed(2),
+            totals.otHours.toFixed(2),
+            totals.holHours.toFixed(2),
+            totals.ptoHours.toFixed(2),
+            (totals.regHours + totals.otHours + totals.holHours + totals.ptoHours).toFixed(2),
+            totals.regular.toFixed(2),
+            totals.overtime.toFixed(2),
+            totals.holiday.toFixed(2),
+            totals.pto.toFixed(2),
+            totals.gross.toFixed(2),
+            totals.federal.toFixed(2),
+            totals.fica.toFixed(2),
+            totals.medicare.toFixed(2),
+            totals.state.toFixed(2),
+            totals.local.toFixed(2),
+            totals.deductions.toFixed(2),
+            totals.net.toFixed(2)
+        ].join(',');
+        csvContent += row + "\n";
+    });
+
+    downloadCSV(csvContent, `PayTrax_Employee_Wages_${startDateStr}_to_${endDateStr}.csv`);
+}
+
+/**
+ * Helper function to download CSV file
+ * @param {string} csvContent - The CSV content
+ * @param {string} filename - The filename for download
+ */
+function downloadCSV(csvContent, filename) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 export function generateDateRangeEmployeeReport(startDateStr, endDateStr, employeeId) {
     const start = new Date(startDateStr + 'T00:00:00');
     const end = new Date(endDateStr + 'T23:59:59');

@@ -349,6 +349,53 @@
                             </div>
                         </div>
 
+                        <h5>Employee Deductions</h5>
+                        <div id="deductionsSection" style="display:none;">
+                            <div style="overflow-x: auto; margin-bottom: 15px;">
+                                <table class="report-table" id="deductionsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Deduction Name</th>
+                                            <th>Type</th>
+                                            <th>Amount</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="deductionsTableBody">
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="card" style="background: #f8f9fa;">
+                                <div class="card-body">
+                                    <h6>Add Deduction</h6>
+                                    <div class="form-grid">
+                                        <div class="form-group">
+                                            <label class="form-label">Deduction Name</label>
+                                            <input type="text" id="deductionName" class="form-input" placeholder="e.g., 401k, Health Insurance">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Type</label>
+                                            <select id="deductionType" class="form-input">
+                                                <option value="fixed">Fixed Amount ($)</option>
+                                                <option value="percent">Percentage of Gross (%)</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Amount</label>
+                                            <input type="number" id="deductionAmount" class="form-input" placeholder="100.00" step="0.01" min="0.01">
+                                        </div>
+                                    </div>
+                                    <div style="text-align: center; margin-top: 10px;">
+                                        <button type="button" class="btn btn-success btn-sm" id="addDeductionBtn">Add Deduction</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="noEmployeeDeductionMsg" style="text-align: center; color: #6c757d; font-style: italic; margin: 15px 0;">
+                            Save employee first to manage deductions
+                        </div>
+
                          <div style="text-align: center;">
                             <button type="submit" class="btn btn-primary">Save Employee</button>
                             <button type="button" class="btn btn-secondary" id="newEmployeeBtn">New Employee</button>
@@ -665,8 +712,12 @@
         </div>
     </div>
 
+    <!-- jsPDF Library for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
     <script type="module" src="js/main.js"></script>
-    
+
     <script>
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {

@@ -114,6 +114,69 @@ function handleDeleteEmployee() {
 }
 
 /**
+ * Handles adding a deduction to an employee.
+ */
+function handleAddDeduction() {
+    const employeeId = document.getElementById('employeeId').value;
+    if (!employeeId) {
+        alert('Please save the employee first before adding deductions.');
+        return;
+    }
+
+    const name = document.getElementById('deductionName').value.trim();
+    const amount = parseFloat(document.getElementById('deductionAmount').value);
+    const type = document.getElementById('deductionType').value;
+
+    if (!name) {
+        alert('Please enter a deduction name.');
+        return;
+    }
+
+    if (!amount || amount <= 0) {
+        alert('Please enter a valid amount.');
+        return;
+    }
+
+    const success = logic.addDeduction(employeeId, name, amount, type);
+    if (success) {
+        ui.renderDeductionsTable(employeeId);
+        // Clear the form
+        document.getElementById('deductionName').value = '';
+        document.getElementById('deductionAmount').value = '';
+        document.getElementById('deductionType').value = 'fixed';
+        saveData();
+
+        // Trigger recalculation of all periods for this employee
+        logic.recalculateAllPeriodsForEmployee(employeeId);
+        saveData();
+    }
+}
+
+/**
+ * Handles deleting a deduction (delegated event handler).
+ * @param {Event} event - The click event
+ */
+function handleDeleteDeduction(event) {
+    const deleteButton = event.target.closest('.delete-deduction-btn');
+    if (!deleteButton) return;
+
+    const deductionId = deleteButton.dataset.deductionId;
+    const employeeId = document.getElementById('employeeId').value;
+
+    if (!confirm('Are you sure you want to delete this deduction?')) return;
+
+    const success = logic.deleteDeduction(employeeId, deductionId);
+    if (success) {
+        ui.renderDeductionsTable(employeeId);
+        saveData();
+
+        // Trigger recalculation of all periods for this employee
+        logic.recalculateAllPeriodsForEmployee(employeeId);
+        saveData();
+    }
+}
+
+/**
  * Handles generating the pay stub.
  */
 function handleGeneratePayStub() {
@@ -154,6 +217,10 @@ function setupEventListeners() {
     document.getElementById('deleteEmployeeBtn').addEventListener('click', handleDeleteEmployee);
     document.getElementById('importDataBtn').addEventListener('click', importData);
     document.getElementById('exportDataBtn').addEventListener('click', exportData);
+
+    // Deductions Management
+    document.getElementById('addDeductionBtn').addEventListener('click', handleAddDeduction);
+    document.getElementById('deductionsTableBody').addEventListener('click', handleDeleteDeduction);
     
     // Reports
     document.getElementById('reportType').addEventListener('change', ui.toggleReportInputs);
@@ -166,8 +233,32 @@ function setupEventListeners() {
             ui.toggleReportInputs();
         }
     });
-    
-    document.getElementById('generateReportBtn').addEventListener('click', ui.renderReportUI);
+
+    // Delegated event listener for CSV export button
+    document.getElementById('reportOutput').addEventListener('click', (event) => {
+        if (event.target.id === 'exportReportCSVBtn') {
+            const reportType = event.target.dataset.reportType;
+            const period = event.target.dataset.period;
+            const start = event.target.dataset.start;
+            const end = event.target.dataset.end;
+            const employeeId = event.target.dataset.employee;
+
+            switch (reportType) {
+                case 'w2':
+                    logic.exportW2ReportToCSV(period);
+                    break;
+                case '941':
+                    logic.export941ReportToCSV(period);
+                    break;
+                case '940':
+                    logic.export940ReportToCSV(period);
+                    break;
+                case 'daterange-employee':
+                    logic.exportDateRangeEmployeeReportToCSV(start, end, employeeId);
+                    break;
+            }
+        }
+    });
     
     // Pay Stub
     document.getElementById('printPayStubBtn').addEventListener('click', ui.printPayStub);

@@ -184,6 +184,10 @@ export function resetEmployeeForm() {
     document.getElementById('employeeId').value = '';
     document.getElementById('deleteEmployeeBtn').style.display = 'none';
     document.getElementById('employeeList').value = '';
+
+    // Hide deductions section for new employees
+    document.getElementById('deductionsSection').style.display = 'none';
+    document.getElementById('noEmployeeDeductionMsg').style.display = 'block';
 }
 
 /**
@@ -197,7 +201,7 @@ export function renderEmployeeFormForEdit(employeeId) {
     }
     const employee = appData.employees.find(e => e.id === employeeId);
     if (!employee) return;
-    
+
     document.getElementById('employeeFormTitle').textContent = 'Edit Employee';
     document.getElementById('employeeId').value = employee.id;
     document.getElementById('idNumber').value = employee.idNumber;
@@ -214,6 +218,44 @@ export function renderEmployeeFormForEdit(employeeId) {
 	//document.getElementById('ptoBalance').value = employee.ptoBalance;
 	document.getElementById('ptoBalance').value = employee.ptoBalance.toFixed(2);
     document.getElementById('deleteEmployeeBtn').style.display = 'inline-block';
+
+    // Show and populate deductions section
+    document.getElementById('deductionsSection').style.display = 'block';
+    document.getElementById('noEmployeeDeductionMsg').style.display = 'none';
+    renderDeductionsTable(employeeId);
+}
+
+/**
+ * Renders the deductions table for an employee.
+ * @param {string} employeeId - The ID of the employee
+ */
+export function renderDeductionsTable(employeeId) {
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee) return;
+
+    const tbody = document.getElementById('deductionsTableBody');
+    tbody.innerHTML = '';
+
+    if (!employee.deductions || employee.deductions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; font-style:italic; color:#6c757d;">No deductions configured</td></tr>';
+        return;
+    }
+
+    employee.deductions.forEach(ded => {
+        const row = document.createElement('tr');
+        const typeDisplay = ded.type === 'fixed' ? `$${ded.amount.toFixed(2)}` : `${ded.amount.toFixed(2)}%`;
+        const typeLabel = ded.type === 'fixed' ? 'Fixed' : 'Percent';
+
+        row.innerHTML = `
+            <td>${ded.name}</td>
+            <td>${typeLabel}</td>
+            <td>${typeDisplay}</td>
+            <td>
+                <button class="btn btn-danger btn-sm delete-deduction-btn" data-deduction-id="${ded.id}">Delete</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
 }
 
 /**
@@ -367,34 +409,57 @@ export function renderReportUI() {
     const output = document.getElementById('reportOutput');
     let reportHTML = '';
 
+    // Add export button HTML
+    let exportButton = '';
+
     switch (reportType) {
-        case 'taxdeposit': 
-            reportHTML = logic.generateTaxDepositReport(); 
+        case 'taxdeposit':
+            reportHTML = logic.generateTaxDepositReport();
             break;
         case 'annual':
         case '941':
         case '940':
             const periodStr = document.getElementById('reportPeriodText').value;
-            if (reportType === 'annual') reportHTML = logic.generateW2Report(periodStr);
-            if (reportType === '941') reportHTML = logic.generate941Report(periodStr);
-            if (reportType === '940') reportHTML = logic.generate940Report(periodStr);
+            if (reportType === 'annual') {
+                reportHTML = logic.generateW2Report(periodStr);
+                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="w2" data-period="${periodStr}">Export to CSV</button>`;
+            }
+            if (reportType === '941') {
+                reportHTML = logic.generate941Report(periodStr);
+                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="941" data-period="${periodStr}">Export to CSV</button>`;
+            }
+            if (reportType === '940') {
+                reportHTML = logic.generate940Report(periodStr);
+                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="940" data-period="${periodStr}">Export to CSV</button>`;
+            }
             break;
         case 'daterange-employee':
         case 'daterange-employer':
             let startDateRangeStr = document.getElementById('reportStartDate').value;
             let endDateRangeStr = document.getElementById('reportEndDateRange').value;
             const reportEmployeeId = document.getElementById('reportEmployee').value;
-            
+
             if (!startDateRangeStr && !endDateRangeStr) {
                 const year = appData.settings.taxYear;
                 startDateRangeStr = `${year}-01-01`;
                 endDateRangeStr = `${year}-12-31`;
             }
-            
-            if (reportType === 'daterange-employee') reportHTML = logic.generateDateRangeEmployeeReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
-            if (reportType === 'daterange-employer') reportHTML = logic.generateDateRangeEmployerReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
+
+            if (reportType === 'daterange-employee') {
+                reportHTML = logic.generateDateRangeEmployeeReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
+                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employee" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}">Export to CSV</button>`;
+            }
+            if (reportType === 'daterange-employer') {
+                reportHTML = logic.generateDateRangeEmployerReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
+            }
             break;
     }
+
+    // Add export button if available
+    if (exportButton && !reportHTML.includes('alert alert-info')) {
+        reportHTML = `<div style="text-align: right; margin-bottom: 15px;">${exportButton}</div>` + reportHTML;
+    }
+
     output.innerHTML = reportHTML;
 }
 
