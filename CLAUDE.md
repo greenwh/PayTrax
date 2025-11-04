@@ -8,11 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Key Characteristics:**
 - Vanilla JavaScript (no frameworks, no TypeScript, no build tools)
-- ~2,316 lines of code
+- ~4,000+ lines of code
 - IndexedDB for persistent storage with localStorage fallback
 - Progressive Web App (PWA) with offline support via Service Worker
 - Privacy-first: 100% client-side, no data leaves the browser
 - Deployed as static files (GitHub Pages compatible)
+- jsPDF library for PDF export functionality (loaded via CDN)
 
 ## Getting Started - Development Setup
 
@@ -47,15 +48,16 @@ python -m http.server 8000
 All application code is in `/js/` directory using ES6 module imports. Each module has a specific responsibility:
 
 ```
-js/main.js       → App orchestrator, event handlers, tab management
-js/state.js      → Single source of truth (appData object), IndexedDB persistence
-js/logic.js      → All payroll calculations, employee management, tax reporting
-js/ui.js         → DOM manipulation, view rendering, form management
-js/banking.js    → Bank register, reconciliation, filtering, CSV export
-js/db.js         → IndexedDB API wrapper
-js/data-io.js    → JSON import/export functionality
-js/migration.js  → Data versioning (v1→v4 backward compatibility)
-js/utils.js      → Helper functions (date formatting, parsing)
+js/main.js        → App orchestrator, event handlers, tab management
+js/state.js       → Single source of truth (appData object), IndexedDB persistence
+js/logic.js       → All payroll calculations, employee management, tax reporting, CSV exports
+js/ui.js          → DOM manipulation, view rendering, form management
+js/banking.js     → Bank register, reconciliation, filtering, CSV export
+js/db.js          → IndexedDB API wrapper
+js/data-io.js     → JSON import/export functionality
+js/migration.js   → Data versioning (v1→v5 backward compatibility)
+js/utils.js       → Helper functions (date formatting, parsing)
+js/validation.js  → Comprehensive data validation module (NEW in v5)
 ```
 
 ### State Management Pattern
@@ -70,11 +72,31 @@ js/utils.js      → Helper functions (date formatting, parsing)
 **Data Structure:**
 ```javascript
 appData = {
-  version: 4,
-  settings: { companyName, taxYear, payFrequency, firstPayPeriodStartDate, ... },
-  employees: [{ id, name, ssn, payRate, taxWithholding, ptoBalance, taxRemainders, ... }],
-  payPeriods: [{ periodNumber, startDate, endDate, payDate, hours: { employeeId: { regular, overtime, ... } } }],
-  bankRegister: [{ date, description, amount, category, reconciled }]
+  version: 5,  // Updated from 4 to 5
+  settings: {
+    companyName, taxYear, payFrequency, firstPayPeriodStartDate,
+    socialSecurity, medicare, sutaRate, futaRate,
+    ssWageBase, futaWageBase, additionalMedicareThreshold, additionalMedicareRate,  // NEW in v5
+    taxFrequencies: { federal, futa, suta, state, local },
+    ...
+  },
+  employees: [{
+    id, name, idNumber, address, rate, overtimeMultiplier, holidayMultiplier,
+    fedTaxRate, stateTaxRate, localTaxRate,
+    ptoAccrualRate, ptoBalance,
+    taxRemainders: { federal, fica, medicare, state, local, suta, futa },
+    deductions: [{ id, name, amount, type }]  // NEW in v5
+  }],
+  payPeriods: [{
+    period, startDate, endDate, payDate,
+    hours: { regular, overtime, pto, holiday },
+    earnings: { regular, overtime, pto, holiday },
+    grossPay, netPay, ptoAccrued,
+    taxes: { federal, fica, medicare, state, local, suta, futa, total, unrounded },
+    deductions: [...],  // NEW in v5
+    totalDeductions     // NEW in v5
+  }],
+  bankRegister: [{ id, date, description, debit, credit, reconciled }]
 }
 ```
 
@@ -102,23 +124,27 @@ Single module import triggers entire app initialization. Service Worker is regis
 | Payroll Calculations | `logic.js` | `calculatePay()`, `recalculatePeriod()`, `recalculateAllPeriodsForEmployee()` |
 | Pay Period Generation | `logic.js` | `generatePayPeriods()` (weekly, bi-weekly, semi-monthly, annual) |
 | Employee Management | `logic.js` | `saveEmployeeFromForm()`, `deleteEmployee()` |
-| Pay Stubs | `logic.js` + `ui.js` | `getPayStubData()` (HTML printable format) |
-| Tax Reporting | `logic.js` | `generateW2Report()`, `generate941Report()`, `generate940Report()`, `generateTaxDepositReport()` |
+| **Employee Deductions** | `logic.js` + `ui.js` | `addDeduction()`, `deleteDeduction()`, `calculateDeductions()`, `renderDeductionsTable()` **NEW v5** |
+| Pay Stubs | `logic.js` + `ui.js` | `getPayStubData()` (HTML printable format, includes deductions) |
+| Tax Reporting (Generic) | `logic.js` | `generateW2Report()`, `generate941Report()`, `generate940Report()`, `generateTaxDepositReport()` **Updated v5** |
+| **CSV Export** | `logic.js` | `exportW2ReportToCSV()`, `export941ReportToCSV()`, `export940ReportToCSV()`, `exportDateRangeEmployeeReportToCSV()` **NEW v5** |
 | Bank Register | `banking.js` | `addTransaction()`, `reconcileTransaction()`, `filterTransactions()`, CSV export |
 | Import/Export | `data-io.js` | `importData()`, `exportData()` (with version checking) |
-| Backward Compatibility | `migration.js` | Handles v1→v4 data migration sequentially |
+| **Data Validation** | `validation.js` | `validateEmployee()`, `validateHours()`, `validateSettings()`, `validateTransaction()`, `validateDeduction()` **NEW v5** |
+| Backward Compatibility | `migration.js` | Handles v1→v5 data migration sequentially |
 
 ## Data Versioning & Migration
 
-**Current Version:** 4
+**Current Version:** 5
 
-Old backups are automatically migrated when imported. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v4 transformations are applied.
+Old backups are automatically migrated when imported. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v5 transformations are applied.
 
 **Version History:**
 - v1 → Initial structure
 - v2 → Added employeeIdPrefix, ptoCarryOverLimit
 - v3 → Added taxRemainders per employee (fractional cent tracking)
 - v4 → Added reconciled status for bank transactions
+- v5 → Added employee deductions, configurable tax settings (ssWageBase, futaWageBase, additionalMedicareThreshold, additionalMedicareRate), comprehensive validation module
 
 ## PWA & Offline Support
 
@@ -196,6 +222,88 @@ Since there's no automated test framework, testing is manual:
 - Clean git history, ready for GitHub Pages
 - Deployment is simply pushing to `gh-pages` branch (static files)
 - No build step required
+
+## Version 5 Enhancements (2025)
+
+### Employee Deductions System
+- **Purpose:** Allow pre-tax and post-tax deductions from employee paychecks
+- **Types:** Fixed dollar amount or percentage of gross pay
+- **Examples:** 401k, health insurance, union dues, garnishments
+- **Implementation:**
+  - `logic.js::addDeduction(employeeId, name, amount, type)` - Add new deduction
+  - `logic.js::deleteDeduction(employeeId, deductionId)` - Remove deduction
+  - `logic.js::calculateDeductions(employee, grossPay)` - Calculate total deductions
+  - Deductions are stored in employee object: `deductions: [{ id, name, amount, type }]`
+  - Calculated deductions stored in pay period: `deductions: [...]`, `totalDeductions: number`
+  - Net pay calculation: `netPay = grossPay - employeeTaxes - totalDeductions`
+- **UI:** Deductions section in employee form (only visible when editing existing employees)
+- **Auto-recalculation:** Adding/removing deductions triggers `recalculateAllPeriodsForEmployee()`
+
+### Configurable Tax Settings
+- **Previous:** Tax wage bases and thresholds were hardcoded constants
+- **Now:** All tax values configurable in settings:
+  - `ssWageBase` (Social Security Wage Base) - default $168,600
+  - `futaWageBase` (FUTA Wage Base) - default $7,000
+  - `additionalMedicareThreshold` - default $200,000
+  - `additionalMedicareRate` - default 0.9%
+- **Benefits:**
+  - Adapt to annual IRS updates without code changes
+  - Support for different jurisdictions/years
+  - All reports (W-2, 941, 940) use configurable values
+- **UI:** "Tax Wage Limits & Thresholds" section in settings tab
+
+### Generic, Year-Agnostic Tax Reports
+- **Previous:** Form 941 and 940 had hardcoded line numbers tied to 2025 forms
+- **Now:** Reports use descriptive labels instead of form line numbers
+  - Example: "Taxable social security wages (subject to $168,600 limit)" instead of "Line 5a"
+  - Dynamic insertion of configurable values into descriptions
+  - Reports adapt to any year without code changes
+- **Benefits:**
+  - Reports remain valid even if IRS changes form layouts
+  - Self-explanatory data that maps to current forms
+  - Easier to understand for users
+
+### CSV Export Functionality
+- **Reports with CSV Export:**
+  - W-2 Annual Report (`exportW2ReportToCSV()`)
+  - Form 941 Quarterly Report (`export941ReportToCSV()`)
+  - Form 940 Annual Report (`export940ReportToCSV()`)
+  - Custom Employee Wage Report (`exportDateRangeEmployeeReportToCSV()`)
+- **Features:**
+  - One-click export button appears when report is generated
+  - Proper CSV formatting with headers
+  - Escaped quotes for text fields
+  - Date-stamped filenames
+  - Ready for Excel, Google Sheets, QuickBooks
+- **Implementation:**
+  - Export functions in `logic.js`
+  - `downloadCSV(csvContent, filename)` helper function
+  - Dynamic export buttons in `ui.js::renderReportUI()`
+  - Delegated event listener in `main.js`
+
+### Comprehensive Data Validation Module
+- **Module:** `js/validation.js`
+- **Validation Functions:**
+  - `validateNumber(value, fieldName, min, max, required)` - Numeric field validation
+  - `validateString(value, fieldName, minLength, maxLength, required)` - Text validation
+  - `validateDate(value, fieldName, required, minDate, maxDate)` - Date validation
+  - `validateEmployee(employeeData)` - Complete employee form validation
+  - `validateHours(hours)` - Pay period hours validation (max 168 hours)
+  - `validateSettings(settings)` - Company settings validation
+  - `validateTransaction(transaction)` - Bank transaction validation
+  - `validateDeduction(deduction)` - Employee deduction validation
+- **Error Handling:**
+  - `ValidationError` class for structured errors
+  - `displayValidationErrors(errors, elementId)` - User-friendly error display
+  - Returns array of errors for batch validation
+- **Status:** Module created, ready for integration into form submissions
+
+### External Libraries
+- **jsPDF:** PDF generation library (v2.5.1)
+- **jsPDF-AutoTable:** Table plugin for jsPDF (v3.5.31)
+- **Loading:** CDN scripts in `index.html` before `main.js`
+- **Purpose:** PDF export functionality for reports and pay stubs
+- **Status:** Library loaded and available globally via `window.jspdf`
 
 ## Documentation & References
 
