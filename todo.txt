@@ -7,4 +7,4 @@ Export to pdf for paystub and reports
 Data Encryption
 Make 941 and 940 reports more general
 Make Report Tax Constants a setting
-Setup releases on GitHub
+
