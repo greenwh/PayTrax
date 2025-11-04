@@ -14,6 +14,8 @@ import * as ui from './ui.js';
 import * as logic from './logic.js';
 import * as banking from './banking.js'; // Import the new banking module
 import { importData, exportData } from './data-io.js';
+import * as pdfExport from './pdf-export.js';
+import * as validation from './validation.js';
 
 // --- EVENT HANDLER FUNCTIONS ---
 // These functions connect user actions to the application's logic and UI updates.
@@ -67,6 +69,20 @@ function handlePeriodChange() {
  * Handles changes to any of the hour input fields on the dashboard.
  */
 function handleHoursChange() {
+    // Validate hours input
+    const hours = {
+        regular: parseFloat(document.getElementById('regularHours').value) || 0,
+        overtime: parseFloat(document.getElementById('overtimeHours').value) || 0,
+        pto: parseFloat(document.getElementById('ptoHours').value) || 0,
+        holiday: parseFloat(document.getElementById('holidayHours').value) || 0
+    };
+
+    const hoursErrors = validation.validateHours(hours);
+    if (hoursErrors.length > 0) {
+        // Show warning but allow calculation (non-blocking)
+        console.warn('Hours validation warnings:', hoursErrors);
+    }
+
     logic.calculatePay();
     const employeeId = document.getElementById('currentEmployee').value;
     const periodNum = document.getElementById('currentPeriod').value;
@@ -87,6 +103,27 @@ function handleHoursChange() {
  */
 function handleEmployeeFormSubmit(event) {
     event.preventDefault();
+
+    // Gather employee data from form
+    const employeeData = {
+        name: document.getElementById('employeeName').value,
+        rate: parseFloat(document.getElementById('hourlyRate').value) || 0,
+        overtimeMultiplier: parseFloat(document.getElementById('overtimeRate').value) || 1.5,
+        holidayMultiplier: parseFloat(document.getElementById('holidayRate').value) || 2.0,
+        fedTaxRate: parseFloat(document.getElementById('federalTax').value) || 0,
+        stateTaxRate: parseFloat(document.getElementById('stateTax').value) || 0,
+        localTaxRate: parseFloat(document.getElementById('localTax').value) || 0,
+        ptoAccrualRate: parseFloat(document.getElementById('ptoAccrualRate').value) || 0,
+        ptoBalance: parseFloat(document.getElementById('ptoBalance').value) || 0
+    };
+
+    // Validate employee data
+    const errors = validation.validateEmployee(employeeData);
+    if (errors.length > 0) {
+        validation.displayValidationErrors(errors);
+        return; // Prevent saving if validation fails
+    }
+
     logic.saveEmployeeFromForm();
     ui.populateEmployeeDropdowns();
     ui.resetEmployeeForm();
@@ -127,13 +164,11 @@ function handleAddDeduction() {
     const amount = parseFloat(document.getElementById('deductionAmount').value);
     const type = document.getElementById('deductionType').value;
 
-    if (!name) {
-        alert('Please enter a deduction name.');
-        return;
-    }
-
-    if (!amount || amount <= 0) {
-        alert('Please enter a valid amount.');
+    // Validate deduction data
+    const deductionData = { name, amount, type };
+    const errors = validation.validateDeduction(deductionData);
+    if (errors.length > 0) {
+        validation.displayValidationErrors(errors);
         return;
     }
 
@@ -234,7 +269,7 @@ function setupEventListeners() {
         }
     });
 
-    // Delegated event listener for CSV export button
+    // Delegated event listeners for CSV and PDF export buttons
     document.getElementById('reportOutput').addEventListener('click', (event) => {
         if (event.target.id === 'exportReportCSVBtn') {
             const reportType = event.target.dataset.reportType;
@@ -258,10 +293,43 @@ function setupEventListeners() {
                     break;
             }
         }
+
+        if (event.target.id === 'exportReportPDFBtn') {
+            const reportType = event.target.dataset.reportType;
+            const period = event.target.dataset.period;
+            const start = event.target.dataset.start;
+            const end = event.target.dataset.end;
+            const employeeId = event.target.dataset.employee;
+            const reportSubType = event.target.dataset.subtype;
+
+            switch (reportType) {
+                case 'w2':
+                    pdfExport.exportW2ReportToPDF(period);
+                    break;
+                case '941':
+                    pdfExport.export941ReportToPDF(period);
+                    break;
+                case '940':
+                    pdfExport.export940ReportToPDF(period);
+                    break;
+                case 'daterange':
+                    pdfExport.exportCustomReportToPDF(start, end, employeeId, reportSubType);
+                    break;
+            }
+        }
     });
     
     // Pay Stub
     document.getElementById('printPayStubBtn').addEventListener('click', ui.printPayStub);
+    document.getElementById('exportPayStubPDFBtn').addEventListener('click', () => {
+        const employeeId = document.getElementById('currentEmployee').value;
+        const periodNum = document.getElementById('currentPeriod').value;
+        if (!employeeId || !periodNum) {
+            alert('Please select an employee and pay period first.');
+            return;
+        }
+        pdfExport.exportPayStubToPDF(employeeId, periodNum);
+    });
 
     // Banking event listeners are now handled within the banking module
 }

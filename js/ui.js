@@ -409,8 +409,8 @@ export function renderReportUI() {
     const output = document.getElementById('reportOutput');
     let reportHTML = '';
 
-    // Add export button HTML
-    let exportButton = '';
+    // Add export buttons HTML (CSV and PDF)
+    let exportButtons = '';
 
     switch (reportType) {
         case 'taxdeposit':
@@ -422,15 +422,24 @@ export function renderReportUI() {
             const periodStr = document.getElementById('reportPeriodText').value;
             if (reportType === 'annual') {
                 reportHTML = logic.generateW2Report(periodStr);
-                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="w2" data-period="${periodStr}">Export to CSV</button>`;
+                exportButtons = `
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="w2" data-period="${periodStr}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="w2" data-period="${periodStr}">Export to PDF</button>
+                `;
             }
             if (reportType === '941') {
                 reportHTML = logic.generate941Report(periodStr);
-                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="941" data-period="${periodStr}">Export to CSV</button>`;
+                exportButtons = `
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="941" data-period="${periodStr}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="941" data-period="${periodStr}">Export to PDF</button>
+                `;
             }
             if (reportType === '940') {
                 reportHTML = logic.generate940Report(periodStr);
-                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="940" data-period="${periodStr}">Export to CSV</button>`;
+                exportButtons = `
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="940" data-period="${periodStr}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="940" data-period="${periodStr}">Export to PDF</button>
+                `;
             }
             break;
         case 'daterange-employee':
@@ -447,17 +456,23 @@ export function renderReportUI() {
 
             if (reportType === 'daterange-employee') {
                 reportHTML = logic.generateDateRangeEmployeeReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
-                exportButton = `<button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employee" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}">Export to CSV</button>`;
+                exportButtons = `
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employee" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="daterange" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}" data-subtype="employee">Export to PDF</button>
+                `;
             }
             if (reportType === 'daterange-employer') {
                 reportHTML = logic.generateDateRangeEmployerReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
+                exportButtons = `
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="daterange" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}" data-subtype="employer">Export to PDF</button>
+                `;
             }
             break;
     }
 
-    // Add export button if available
-    if (exportButton && !reportHTML.includes('alert alert-info')) {
-        reportHTML = `<div style="text-align: right; margin-bottom: 15px;">${exportButton}</div>` + reportHTML;
+    // Add export buttons if available
+    if (exportButtons && !reportHTML.includes('alert alert-info')) {
+        reportHTML = `<div style="text-align: right; margin-bottom: 15px; display: flex; gap: 10px; justify-content: flex-end;">${exportButtons}</div>` + reportHTML;
     }
 
     output.innerHTML = reportHTML;

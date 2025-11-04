@@ -22,6 +22,7 @@ const urlsToCache = [
   './js/migration.js',
   './js/utils.js',
   './js/validation.js',
+  './js/pdf-export.js',
   './icons/icon-192.png', // Also cache the main icons
   './icons/icon-512.png'
 ];
