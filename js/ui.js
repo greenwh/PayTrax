@@ -46,6 +46,10 @@ export function displaySettings() {
     document.getElementById('medicare').value = settings.medicare;
     document.getElementById('sutaRate').value = settings.sutaRate;
     document.getElementById('futaRate').value = settings.futaRate;
+    document.getElementById('ssWageBase').value = settings.ssWageBase;
+    document.getElementById('futaWageBase').value = settings.futaWageBase;
+    document.getElementById('additionalMedicareThreshold').value = settings.additionalMedicareThreshold;
+    document.getElementById('additionalMedicareRate').value = settings.additionalMedicareRate;
     document.getElementById('federalTaxFrequency').value = settings.taxFrequencies.federal;
     document.getElementById('futaTaxFrequency').value = settings.taxFrequencies.futa;
     document.getElementById('sutaTaxFrequency').value = settings.taxFrequencies.suta;
@@ -250,12 +254,33 @@ export function renderPayStubUI(employeeId, periodNum) {
         <tr><td>STATE</td><td class="text-right">$${period.taxes.state.toFixed(2)}</td><td class="text-right">$${ytd.state.toFixed(2)}</td></tr>
         <tr><td>LOCAL</td><td class="text-right">$${period.taxes.local.toFixed(2)}</td><td class="text-right">$${ytd.local.toFixed(2)}</td></tr>
     `;
-    
+
+    // Calculate YTD deductions
+    const empPayPeriods = appData.payPeriods[employeeId] || [];
+    let ytdDeductions = 0;
+    for (let i = 0; i < period.period; i++) {
+        const p = empPayPeriods[i];
+        if (p && p.totalDeductions > 0) {
+            ytdDeductions += p.totalDeductions;
+        }
+    }
+
     document.getElementById('paystubSummaryGross').textContent = period.grossPay.toFixed(2);
     document.getElementById('paystubSummaryTaxes').textContent = period.taxes.total.toFixed(2);
     document.getElementById('paystubYTDEarnings').textContent = ytd.gross.toFixed(2);
     document.getElementById('paystubYTDTaxes').textContent = ytdTaxesTotal.toFixed(2);
     document.getElementById('paystubNetPay').textContent = period.netPay.toFixed(2);
+
+    // Update deductions display
+    const deductionsDisplay = period.totalDeductions || 0;
+    const deductionElements = document.querySelectorAll('[id*="Deductions"]');
+    deductionElements.forEach(el => {
+        if (el.id === 'paystubSummaryDeductions') {
+            el.textContent = deductionsDisplay.toFixed(2);
+        } else if (el.id === 'paystubYTDDeductions') {
+            el.textContent = ytdDeductions.toFixed(2);
+        }
+    });
 
     const ptoUsed = period.hours.pto;
     const ptoEarned = period.ptoAccrued;

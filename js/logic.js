@@ -70,10 +70,12 @@ export function generateBasePayPeriods() {
         hours: { regular: 0, overtime: 0, pto: 0, holiday: 0 },
         earnings: { regular: 0, overtime: 0, pto: 0, holiday: 0 },
         grossPay: 0, netPay: 0, ptoAccrued: 0,
-        taxes: { 
+        taxes: {
             federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0, total: 0,
             unrounded: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 }
-        }
+        },
+        deductions: [],
+        totalDeductions: 0
     }));
 }
 
@@ -189,7 +191,11 @@ function recalculatePeriod(employeeId, periodNum) {
     appData.employees[employeeIndex].taxRemainders = newRemainders;
 
     const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
-    const netPay = grossPay - employeeTaxes;
+
+    // Calculate deductions
+    const { deductions, total: totalDeductions } = calculateDeductions(employee, grossPay);
+
+    const netPay = grossPay - employeeTaxes - totalDeductions;
 
     // PTO Calculation (preserve existing PTO logic)
     const originalPtoUsed = period.hours.pto || 0;
@@ -212,6 +218,8 @@ function recalculatePeriod(employeeId, periodNum) {
     period.netPay = netPay;
     period.ptoAccrued = ptoAccruedThisPeriod;
     period.taxes = { ...rounded, total: employeeTaxes, unrounded };
+    period.deductions = deductions;
+    period.totalDeductions = totalDeductions;
 
     // Update Bank Register
     const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
@@ -355,7 +363,11 @@ function recalculateSinglePeriodFromUI(employeeId, periodNum) {
     appData.employees[employeeIndex].taxRemainders = newRemainders;
 
     const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
-    const netPay = grossPay - employeeTaxes;
+
+    // Calculate deductions
+    const { deductions, total: totalDeductions } = calculateDeductions(employee, grossPay);
+
+    const netPay = grossPay - employeeTaxes - totalDeductions;
 
     // --- PTO Calculation (remains the same) ---
     const originalPtoUsed = period.hours.pto || 0;
@@ -378,6 +390,8 @@ function recalculateSinglePeriodFromUI(employeeId, periodNum) {
     period.netPay = netPay;
     period.ptoAccrued = ptoAccruedThisPeriod;
     period.taxes = { ...rounded, total: employeeTaxes, unrounded };
+    period.deductions = deductions;
+    period.totalDeductions = totalDeductions;
 
     // --- Update Bank Register ---
     const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
@@ -441,15 +455,17 @@ export function saveEmployeeFromForm() {
     if (employeeId) {
         const index = appData.employees.findIndex(e => e.id === employeeId);
         if (index > -1) {
-            // When editing, preserve the existing remainders to not lose accumulated fractions
+            // When editing, preserve the existing remainders and deductions to not lose data
             const existingRemainders = appData.employees[index].taxRemainders || { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
-            appData.employees[index] = { ...employeeData, taxRemainders: existingRemainders };
+            const existingDeductions = appData.employees[index].deductions || [];
+            appData.employees[index] = { ...employeeData, taxRemainders: existingRemainders, deductions: existingDeductions };
         }
     } else {
-        // For a new employee, create a fresh taxRemainders object
+        // For a new employee, create a fresh taxRemainders object and empty deductions array
         const newEmployee = {
             ...employeeData,
-            taxRemainders: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 }
+            taxRemainders: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 },
+            deductions: []
         };
         appData.employees.push(newEmployee);
         appData.payPeriods[newEmployee.id] = generateBasePayPeriods();
@@ -464,6 +480,100 @@ export function deleteEmployee() {
     if (!employeeId) return;
     appData.employees = appData.employees.filter(e => e.id !== employeeId);
     delete appData.payPeriods[employeeId];
+}
+
+// --- DEDUCTION MANAGEMENT ---
+
+/**
+ * Adds a deduction to an employee.
+ * @param {string} employeeId - The ID of the employee
+ * @param {string} name - Name of the deduction (e.g., "401k", "Health Insurance")
+ * @param {number} amount - Amount of the deduction (per pay period)
+ * @param {string} type - Type: "fixed" for fixed amount or "percent" for percentage of gross
+ */
+export function addDeduction(employeeId, name, amount, type = 'fixed') {
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee) return false;
+
+    if (!employee.deductions) {
+        employee.deductions = [];
+    }
+
+    const deduction = {
+        id: `ded_${new Date().getTime()}`,
+        name: name,
+        amount: parseFloat(amount),
+        type: type
+    };
+
+    employee.deductions.push(deduction);
+    return true;
+}
+
+/**
+ * Updates a deduction for an employee.
+ * @param {string} employeeId - The ID of the employee
+ * @param {string} deductionId - The ID of the deduction to update
+ * @param {string} name - New name of the deduction
+ * @param {number} amount - New amount of the deduction
+ * @param {string} type - New type: "fixed" or "percent"
+ */
+export function updateDeduction(employeeId, deductionId, name, amount, type) {
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee || !employee.deductions) return false;
+
+    const deduction = employee.deductions.find(d => d.id === deductionId);
+    if (!deduction) return false;
+
+    deduction.name = name;
+    deduction.amount = parseFloat(amount);
+    deduction.type = type;
+    return true;
+}
+
+/**
+ * Deletes a deduction from an employee.
+ * @param {string} employeeId - The ID of the employee
+ * @param {string} deductionId - The ID of the deduction to delete
+ */
+export function deleteDeduction(employeeId, deductionId) {
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee || !employee.deductions) return false;
+
+    employee.deductions = employee.deductions.filter(d => d.id !== deductionId);
+    return true;
+}
+
+/**
+ * Calculates total deductions for an employee in a pay period.
+ * @param {object} employee - The employee object
+ * @param {number} grossPay - The gross pay for the period
+ * @returns {object} - Object with deductions array and total
+ */
+export function calculateDeductions(employee, grossPay) {
+    if (!employee.deductions || employee.deductions.length === 0) {
+        return { deductions: [], total: 0 };
+    }
+
+    const calculatedDeductions = employee.deductions.map(ded => {
+        let amount = 0;
+        if (ded.type === 'percent') {
+            amount = (grossPay * ded.amount) / 100;
+        } else {
+            amount = ded.amount;
+        }
+        return {
+            ...ded,
+            calculatedAmount: amount
+        };
+    });
+
+    const total = calculatedDeductions.reduce((sum, ded) => sum + ded.calculatedAmount, 0);
+
+    return {
+        deductions: calculatedDeductions,
+        total: Math.round(total * 100) / 100
+    };
 }
 
 // --- SETTINGS MANAGEMENT ---
@@ -483,6 +593,10 @@ export function updateSettingsFromUI() {
     appData.settings.medicare = parseFloat(document.getElementById('medicare').value);
     appData.settings.sutaRate = parseFloat(document.getElementById('sutaRate').value);
     appData.settings.futaRate = parseFloat(document.getElementById('futaRate').value);
+    appData.settings.ssWageBase = parseFloat(document.getElementById('ssWageBase').value);
+    appData.settings.futaWageBase = parseFloat(document.getElementById('futaWageBase').value);
+    appData.settings.additionalMedicareThreshold = parseFloat(document.getElementById('additionalMedicareThreshold').value);
+    appData.settings.additionalMedicareRate = parseFloat(document.getElementById('additionalMedicareRate').value);
     appData.settings.taxFrequencies.federal = document.getElementById('federalTaxFrequency').value;
     appData.settings.taxFrequencies.futa = document.getElementById('futaTaxFrequency').value;
     appData.settings.taxFrequencies.suta = document.getElementById('sutaTaxFrequency').value;
@@ -576,6 +690,7 @@ export function generateTaxDepositReport() {
 
 export function generateW2Report(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
+    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
     let reportHTML = `<h4>Annual W-2 Data - ${year}</h4>`;
 
     if (appData.employees.length === 0) return `<div class="alert alert-info">No employees found.</div>`;
@@ -589,8 +704,8 @@ export function generateW2Report(yearStr) {
 
         periodsInYear.forEach(p => {
             const grossBeforeThisPeriod = ssWages;
-            if (grossBeforeThisPeriod < SS_WAGE_BASE) {
-                ssWages += Math.min(p.grossPay, SS_WAGE_BASE - grossBeforeThisPeriod);
+            if (grossBeforeThisPeriod < ssWageBase) {
+                ssWages += Math.min(p.grossPay, ssWageBase - grossBeforeThisPeriod);
             }
             totals.gross += p.grossPay;
             totals.federal += p.taxes.federal; totals.fica += p.taxes.fica; totals.medicare += p.taxes.medicare;
@@ -616,8 +731,14 @@ export function generateW2Report(yearStr) {
 export function generate941Report(periodStr) {
     const { start, end, title } = parseDateInput(periodStr, 'quarterly');
     if (!start) return `<div class="alert alert-info">Invalid period. Use format "Q1 2025".</div>`;
-    
+
     const year = start.getFullYear();
+    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+    const additionalMedicareThreshold = appData.settings.additionalMedicareThreshold || 200000;
+    const additionalMedicareRate = (appData.settings.additionalMedicareRate || 0.9) / 100;
+    const ficaTotalRate = (appData.settings.socialSecurity || 6.2) / 100 * 2; // Both employer and employee
+    const medicareTotalRate = (appData.settings.medicare || 1.45) / 100 * 2; // Both employer and employee
+
     const allPayPeriodsInQuarter = [].concat.apply([], Object.values(appData.payPeriods))
         .filter(p => {
             const payDate = new Date(p.payDate);
@@ -637,7 +758,7 @@ export function generate941Report(periodStr) {
     let line5a_col1 = 0, line5c_col1 = 0, line5d_col1 = 0;
     let monthlyLiabilities = [0, 0, 0];
     const qMonths = [start.getMonth(), start.getMonth() + 1, start.getMonth() + 2];
-    
+
     let totalDeposited941Taxes = 0;
     let totalUnrounded941Taxes = 0;
 
@@ -645,7 +766,7 @@ export function generate941Report(periodStr) {
         let ytdSSWages = 0;
         let ytdGross = 0;
         const empPayPeriods = appData.payPeriods[emp.id] || [];
-        
+
         empPayPeriods.forEach(p => {
             const payDate = new Date(p.payDate);
             if (payDate.getFullYear() === year && payDate < start && p.grossPay > 0) {
@@ -662,17 +783,17 @@ export function generate941Report(periodStr) {
         periodsInQuarter.forEach(p => {
             line2 += p.grossPay;
             line3 += p.taxes.federal;
-            
-            if (ytdSSWages < SS_WAGE_BASE) {
-                line5a_col1 += Math.min(p.grossPay, SS_WAGE_BASE - ytdSSWages);
+
+            if (ytdSSWages < ssWageBase) {
+                line5a_col1 += Math.min(p.grossPay, ssWageBase - ytdSSWages);
             }
             ytdSSWages += p.grossPay;
-            
+
             line5c_col1 += p.grossPay;
-            
-            if (ytdGross < 200000 && (ytdGross + p.grossPay) > 200000) {
-                line5d_col1 += (ytdGross + p.grossPay) - 200000;
-            } else if (ytdGross >= 200000) {
+
+            if (ytdGross < additionalMedicareThreshold && (ytdGross + p.grossPay) > additionalMedicareThreshold) {
+                line5d_col1 += (ytdGross + p.grossPay) - additionalMedicareThreshold;
+            } else if (ytdGross >= additionalMedicareThreshold) {
                 line5d_col1 += p.grossPay;
             }
             ytdGross += p.grossPay;
@@ -694,9 +815,9 @@ export function generate941Report(periodStr) {
         });
     });
 
-    const line5a_col2 = line5a_col1 * 0.124;
-    const line5c_col2 = line5c_col1 * 0.029;
-    const line5d_col2 = line5d_col1 * 0.009;
+    const line5a_col2 = line5a_col1 * ficaTotalRate;
+    const line5c_col2 = line5c_col1 * medicareTotalRate;
+    const line5d_col2 = line5d_col1 * additionalMedicareRate;
     const line5e = line5a_col2 + line5c_col2 + line5d_col2;
     const line6 = line3 + line5e;
     const line7 = totalDeposited941Taxes - parseFloat(totalUnrounded941Taxes.toFixed(2)) ;
@@ -706,46 +827,45 @@ export function generate941Report(periodStr) {
     const totalLiability = monthlyLiabilities.reduce((a, b) => a + b, 0);
 
     return `
-        <h4>IRS Form 941 Data - ${title}</h4>
-        <p class="alert alert-info" style="font-size: 0.9em;">This report helps you fill out Form 941. It assumes you've made all tax deposits on time based on your Tax Deposit reports. Therefore, your total deposits on Line 13 will equal your total liability on Line 12, resulting in a \$0.00 balance due.</p>
-        <h5>Part 1</h5>
+        <h4>Quarterly Payroll Tax Report (Form 941) - ${title}</h4>
+        <p class="alert alert-info" style="font-size: 0.9em;">This report provides data for Form 941 quarterly federal tax return. Assumes timely tax deposits per your Tax Deposit reports. Total deposits should equal total liability, resulting in \$0.00 balance due.</p>
+        <h5>Quarterly Summary</h5>
         <table class="report-table">
-            <thead><tr><th>Line</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+            <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
             <tbody>
-                <tr><td>1</td><td>Number of employees who received wages, tips, or other compensation</td><td style="text-align:right;">${line1}</td></tr>
-                <tr><td>2</td><td>Wages, tips, and other compensation</td><td style="text-align:right;">$${line2.toFixed(2)}</td></tr>
-                <tr><td>3</td><td>Federal income tax withheld from wages, tips, and other compensation</td><td style="text-align:right;">$${line3.toFixed(2)}</td></tr>
-                <tr><td colspan="3" style="background-color: #f8f9fa; font-weight: bold;">Line 5: Taxable social security and Medicare wages and tips</td></tr>
-                <tr><td>5a</td><td>Taxable social security wages (Column 1)</td><td style="text-align:right;">$${line5a_col1.toFixed(2)}</td></tr>
-                <tr><td></td><td style="padding-left: 40px;">Column 2 (x 0.124)</td><td style="text-align:right;">$${line5a_col2.toFixed(2)}</td></tr>
-                <tr><td>5b</td><td>Taxable social security tips (Column 1)</td><td style="text-align:right;">$0.00</td></tr>
-                 <tr><td></td><td style="padding-left: 40px;">Column 2 (x 0.124)</td><td style="text-align:right;">$0.00</td></tr>
-                <tr><td>5c</td><td>Taxable Medicare wages & tips (Column 1)</td><td style="text-align:right;">$${line5c_col1.toFixed(2)}</td></tr>
-                 <tr><td></td><td style="padding-left: 40px;">Column 2 (x 0.029)</td><td style="text-align:right;">$${line5c_col2.toFixed(2)}</td></tr>
-                <tr><td>5d</td><td>Taxable wages & tips subject to Additional Medicare Tax withholding (Column 1)</td><td style="text-align:right;">$${line5d_col1.toFixed(2)}</td></tr>
-                 <tr><td></td><td style="padding-left: 40px;">Column 2 (x 0.009)</td><td style="text-align:right;">$${line5d_col2.toFixed(2)}</td></tr>
-                <tr class="sub-total-row"><td>5e</td><td>Total social security and Medicare taxes</td><td style="text-align:right;">$${line5e.toFixed(2)}</td></tr>
-                <tr><td>5f</td><td>Section 3121(q) Notice and Demand — Tax due on unreported tips</td><td style="text-align:right;">$0.00</td></tr>
-                <tr class="sub-total-row"><td>6</td><td>Total taxes before adjustments</td><td style="text-align:right;">$${line6.toFixed(2)}</td></tr>
-                <tr><td>7</td><td>Current quarter's adjustment for fractions of cents</td><td style="text-align:right;">$${line7.toFixed(2)}</td></tr>
-                <tr><td>8</td><td>Current quarter's adjustment for sick pay</td><td style="text-align:right;">$0.00</td></tr>
-                <tr><td>9</td><td>Current quarter's adjustments for tips and group-term life insurance</td><td style="text-align:right;">$0.00</td></tr>
-                <tr class="sub-total-row"><td>10</td><td>Total taxes after adjustments</td><td style="text-align:right;">$${line10.toFixed(2)}</td></tr>
-                <tr><td>11</td><td>Qualified small business payroll tax credit for increasing research activities</td><td style="text-align:right;">$0.00</td></tr>
-                <tr class="total-row"><td>12</td><td>Total taxes after adjustments and nonrefundable credits</td><td style="text-align:right;">$${line12.toFixed(2)}</td></tr>
-                <tr><td>13</td><td>Total deposits for this quarter</td><td style="text-align:right;">$${line13.toFixed(2)}</td></tr>
-                <tr class="total-row"><td>14</td><td>Balance due</td><td style="text-align:right;">$${(line12 - line13).toFixed(2)}</td></tr>
-                <tr class="total-row"><td>15</td><td>Overpayment</td><td style="text-align:right;">$0.00</td></tr>
+                <tr><td>Number of employees who received compensation</td><td style="text-align:right;">${line1}</td></tr>
+                <tr><td>Total wages, tips, and other compensation</td><td style="text-align:right;">$${line2.toFixed(2)}</td></tr>
+                <tr><td>Federal income tax withheld from compensation</td><td style="text-align:right;">$${line3.toFixed(2)}</td></tr>
+                <tr><td colspan="2" style="background-color: #f8f9fa; font-weight: bold;">Taxable Social Security and Medicare Wages</td></tr>
+                <tr><td>Taxable social security wages (subject to $${ssWageBase.toLocaleString()} limit)</td><td style="text-align:right;">$${line5a_col1.toFixed(2)}</td></tr>
+                <tr><td style="padding-left: 40px;">Social security tax (${(ficaTotalRate * 100).toFixed(1)}% combined employer/employee)</td><td style="text-align:right;">$${line5a_col2.toFixed(2)}</td></tr>
+                <tr><td>Taxable social security tips (not currently tracked)</td><td style="text-align:right;">$0.00</td></tr>
+                 <tr><td style="padding-left: 40px;">Social security tax on tips</td><td style="text-align:right;">$0.00</td></tr>
+                <tr><td>Taxable Medicare wages & tips (no wage limit)</td><td style="text-align:right;">$${line5c_col1.toFixed(2)}</td></tr>
+                 <tr><td style="padding-left: 40px;">Medicare tax (${(medicareTotalRate * 100).toFixed(2)}% combined employer/employee)</td><td style="text-align:right;">$${line5c_col2.toFixed(2)}</td></tr>
+                <tr><td>Wages subject to Additional Medicare Tax (over $${additionalMedicareThreshold.toLocaleString()})</td><td style="text-align:right;">$${line5d_col1.toFixed(2)}</td></tr>
+                 <tr><td style="padding-left: 40px;">Additional Medicare Tax withholding (${(additionalMedicareRate * 100).toFixed(1)}%)</td><td style="text-align:right;">$${line5d_col2.toFixed(2)}</td></tr>
+                <tr class="sub-total-row"><td>Total social security and Medicare taxes</td><td style="text-align:right;">$${line5e.toFixed(2)}</td></tr>
+                <tr><td>Tax due on unreported tips (Section 3121(q))</td><td style="text-align:right;">$0.00</td></tr>
+                <tr class="sub-total-row"><td>Total taxes before adjustments</td><td style="text-align:right;">$${line6.toFixed(2)}</td></tr>
+                <tr><td>Adjustment for fractions of cents</td><td style="text-align:right;">$${line7.toFixed(2)}</td></tr>
+                <tr><td>Adjustment for sick pay</td><td style="text-align:right;">$0.00</td></tr>
+                <tr><td>Adjustments for tips and group-term life insurance</td><td style="text-align:right;">$0.00</td></tr>
+                <tr class="sub-total-row"><td>Total taxes after adjustments</td><td style="text-align:right;">$${line10.toFixed(2)}</td></tr>
+                <tr><td>Qualified small business payroll tax credit</td><td style="text-align:right;">$0.00</td></tr>
+                <tr class="total-row"><td>Total taxes after credits</td><td style="text-align:right;">$${line12.toFixed(2)}</td></tr>
+                <tr><td>Total deposits for this quarter</td><td style="text-align:right;">$${line13.toFixed(2)}</td></tr>
+                <tr class="total-row"><td>Balance due (overpayment shown as negative)</td><td style="text-align:right;">$${(line12 - line13).toFixed(2)}</td></tr>
             </tbody>
         </table>
-        <h5 style="margin-top: 20px;">Part 2: Tax Liability for the Quarter</h5>
+        <h5 style="margin-top: 20px;">Monthly Tax Liability Breakdown</h5>
          <table class="report-table">
             <thead><tr><th>Month</th><th>Tax Liability</th></tr></thead>
             <tbody>
-                <tr><td>Month 1</td><td style="text-align:right;">$${monthlyLiabilities[0].toFixed(2)}</td></tr>
-                <tr><td>Month 2</td><td style="text-align:right;">$${monthlyLiabilities[1].toFixed(2)}</td></tr>
-                <tr><td>Month 3</td><td style="text-align:right;">$${monthlyLiabilities[2].toFixed(2)}</td></tr>
-                <tr class="total-row"><td>Total liability for quarter (must equal line 12)</td><td style="text-align:right;">$${totalLiability.toFixed(2)}</td></tr>
+                <tr><td>Month 1 of Quarter</td><td style="text-align:right;">$${monthlyLiabilities[0].toFixed(2)}</td></tr>
+                <tr><td>Month 2 of Quarter</td><td style="text-align:right;">$${monthlyLiabilities[1].toFixed(2)}</td></tr>
+                <tr><td>Month 3 of Quarter</td><td style="text-align:right;">$${monthlyLiabilities[2].toFixed(2)}</td></tr>
+                <tr class="total-row"><td>Total quarterly liability</td><td style="text-align:right;">$${totalLiability.toFixed(2)}</td></tr>
             </tbody>
         </table>
     `;
@@ -753,6 +873,9 @@ export function generate941Report(periodStr) {
 
 export function generate940Report(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
+    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
+    const futaRate = appData.settings.futaRate / 100;
+
     const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods));
     const periodsInYear = allPayPeriods.filter(p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0);
     if (periodsInYear.length === 0) return `<div class="alert alert-info">No payroll data for ${year}.</div>`;
@@ -766,73 +889,72 @@ export function generate940Report(yearStr) {
 
         empPayPeriods.forEach(p => {
             if (p.grossPay <= 0) return;
-            
+
             line3 += p.grossPay;
-            
+
             const wagesThisPeriod = p.grossPay;
             let taxableFUTAWagesThisPeriod = 0;
-            if (ytdFUTAWages < FUTA_WAGE_BASE) {
-                taxableFUTAWagesThisPeriod = Math.min(wagesThisPeriod, FUTA_WAGE_BASE - ytdFUTAWages);
+            if (ytdFUTAWages < futaWageBase) {
+                taxableFUTAWagesThisPeriod = Math.min(wagesThisPeriod, futaWageBase - ytdFUTAWages);
             }
             ytdFUTAWages += wagesThisPeriod;
 
             const payDate = new Date(p.payDate);
             const quarter = Math.floor(payDate.getMonth() / 3) + 1;
-            quarterlyLiabilities[`q${quarter}`] += taxableFUTAWagesThisPeriod * (appData.settings.futaRate / 100);
+            quarterlyLiabilities[`q${quarter}`] += taxableFUTAWagesThisPeriod * futaRate;
         });
 
-        if (ytdFUTAWages > FUTA_WAGE_BASE) {
-            line5 += ytdFUTAWages - FUTA_WAGE_BASE;
+        if (ytdFUTAWages > futaWageBase) {
+            line5 += ytdFUTAWages - futaWageBase;
         }
     });
 
     const line6 = line4 + line5;
     const line7 = line3 - line6;
-    const line8 = line7 * (appData.settings.futaRate / 100);
+    const line8 = line7 * futaRate;
     const line12 = line8; // No adjustments
     const line13 = line12; // Assuming deposits match liability
     const line17 = line12;
-    
+
     let part5HTML = '';
     if (line12 > 500) {
         part5HTML = `
-        <h5 style="margin-top: 20px;">Part 5: FUTA Tax Liability by Quarter</h5>
+        <h5 style="margin-top: 20px;">Quarterly Tax Liability Breakdown</h5>
         <table class="report-table">
             <tbody>
-                <tr><td>16a</td><td>1st Quarter (Jan 1 - Mar 31)</td><td style="text-align:right;">$${quarterlyLiabilities.q1.toFixed(2)}</td></tr>
-                <tr><td>16b</td><td>2nd Quarter (Apr 1 - Jun 30)</td><td style="text-align:right;">$${quarterlyLiabilities.q2.toFixed(2)}</td></tr>
-                <tr><td>16c</td><td>3rd Quarter (Jul 1 - Sep 30)</td><td style="text-align:right;">$${quarterlyLiabilities.q3.toFixed(2)}</td></tr>
-                <tr><td>16d</td><td>4th Quarter (Oct 1 - Dec 31)</td><td style="text-align:right;">$${quarterlyLiabilities.q4.toFixed(2)}</td></tr>
-                <tr class="total-row"><td>17</td><td>Total tax liability for the year (must equal line 12)</td><td style="text-align:right;">$${line17.toFixed(2)}</td></tr>
+                <tr><td>Quarter 1 (January 1 - March 31)</td><td style="text-align:right;">$${quarterlyLiabilities.q1.toFixed(2)}</td></tr>
+                <tr><td>Quarter 2 (April 1 - June 30)</td><td style="text-align:right;">$${quarterlyLiabilities.q2.toFixed(2)}</td></tr>
+                <tr><td>Quarter 3 (July 1 - September 30)</td><td style="text-align:right;">$${quarterlyLiabilities.q3.toFixed(2)}</td></tr>
+                <tr><td>Quarter 4 (October 1 - December 31)</td><td style="text-align:right;">$${quarterlyLiabilities.q4.toFixed(2)}</td></tr>
+                <tr class="total-row"><td>Total tax liability for the year</td><td style="text-align:right;">$${line17.toFixed(2)}</td></tr>
             </tbody>
         </table>`;
     }
 
     return `
-        <h4>IRS Form 940 Data - ${year}</h4>
-         <p class="alert alert-info" style="font-size: 0.9em;">This report helps you fill out Form 940. It assumes you are not in a credit reduction state and have made all tax deposits on time. Therefore, your total deposits on Line 13 will equal your total tax on Line 12, resulting in a \$0.00 balance due.</p>
-        <h5>Part 1 & 2: Determine Your FUTA Tax</h5>
+        <h4>Annual Federal Unemployment (FUTA) Tax Report (Form 940) - ${year}</h4>
+         <p class="alert alert-info" style="font-size: 0.9em;">This report provides data for Form 940 annual federal unemployment tax return. Assumes you are not in a credit reduction state and have made all tax deposits on time. Total deposits should equal total tax, resulting in \$0.00 balance due.</p>
+        <h5>FUTA Tax Calculation</h5>
         <table class="report-table">
-            <thead><tr><th>Line</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+            <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
             <tbody>
-                <tr><td>3</td><td>Total payments to all employees</td><td style="text-align:right;">$${line3.toFixed(2)}</td></tr>
-                <tr><td>4</td><td>Payments exempt from FUTA tax</td><td style="text-align:right;">$${line4.toFixed(2)}</td></tr>
-                <tr><td>5</td><td>Total of payments made to each employee in excess of $7,000</td><td style="text-align:right;">$${line5.toFixed(2)}</td></tr>
-                <tr class="sub-total-row"><td>6</td><td>Subtotal (line 4 + line 5)</td><td style="text-align:right;">$${line6.toFixed(2)}</td></tr>
-                <tr class="sub-total-row"><td>7</td><td>Total taxable FUTA wages (line 3 - line 6)</td><td style="text-align:right;">$${line7.toFixed(2)}</td></tr>
-                <tr class="total-row"><td>8</td><td>FUTA tax before adjustments (line 7 x ${appData.settings.futaRate / 100})</td><td style="text-align:right;">$${line8.toFixed(2)}</td></tr>
+                <tr><td>Total payments to all employees</td><td style="text-align:right;">$${line3.toFixed(2)}</td></tr>
+                <tr><td>Payments exempt from FUTA tax</td><td style="text-align:right;">$${line4.toFixed(2)}</td></tr>
+                <tr><td>Total payments exceeding $${futaWageBase.toLocaleString()} per employee</td><td style="text-align:right;">$${line5.toFixed(2)}</td></tr>
+                <tr class="sub-total-row"><td>Total exempt and excess payments</td><td style="text-align:right;">$${line6.toFixed(2)}</td></tr>
+                <tr class="sub-total-row"><td>Total taxable FUTA wages</td><td style="text-align:right;">$${line7.toFixed(2)}</td></tr>
+                <tr class="total-row"><td>FUTA tax before adjustments (${(futaRate * 100).toFixed(1)}% of taxable wages)</td><td style="text-align:right;">$${line8.toFixed(2)}</td></tr>
             </tbody>
         </table>
-         <h5 style="margin-top: 20px;">Part 3 & 4: Adjustments and Balance</h5>
+         <h5 style="margin-top: 20px;">Adjustments and Final Tax</h5>
          <table class="report-table">
             <tbody>
-                <tr><td>9</td><td>Adjustment for excluded wages</td><td style="text-align:right;">$0.00</td></tr>
-                <tr><td>10</td><td>Adjustment for late payments</td><td style="text-align:right;">$0.00</td></tr>
-                <tr><td>11</td><td>Credit reduction</td><td style="text-align:right;">$0.00</td></tr>
-                <tr class="total-row"><td>12</td><td>Total FUTA tax after adjustments</td><td style="text-align:right;">$${line12.toFixed(2)}</td></tr>
-                <tr><td>13</td><td>FUTA tax deposited for the year</td><td style="text-align:right;">$${line13.toFixed(2)}</td></tr>
-                <tr class="total-row"><td>14</td><td>Balance due</td><td style="text-align:right;">$0.00</td></tr>
-                <tr class="total-row"><td>15</td><td>Overpayment</td><td style="text-align:right;">$0.00</td></tr>
+                <tr><td>Adjustment for excluded wages</td><td style="text-align:right;">$0.00</td></tr>
+                <tr><td>Adjustment for late payments</td><td style="text-align:right;">$0.00</td></tr>
+                <tr><td>Credit reduction (for certain states)</td><td style="text-align:right;">$0.00</td></tr>
+                <tr class="total-row"><td>Total FUTA tax after adjustments</td><td style="text-align:right;">$${line12.toFixed(2)}</td></tr>
+                <tr><td>FUTA tax deposited for the year</td><td style="text-align:right;">$${line13.toFixed(2)}</td></tr>
+                <tr class="total-row"><td>Balance due (overpayment shown as negative)</td><td style="text-align:right;">$0.00</td></tr>
             </tbody>
         </table>
         ${part5HTML}

@@ -204,6 +204,26 @@
                         </div>
                     </div>
                      <hr style="margin: 20px 0;">
+                    <h4>Tax Wage Limits & Thresholds</h4>
+                    <div class="form-grid">
+                         <div class="form-group">
+                            <label class="form-label">Social Security Wage Base ($)</label>
+                            <input type="number" id="ssWageBase" class="form-input" value="168600" step="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">FUTA Wage Base ($)</label>
+                            <input type="number" id="futaWageBase" class="form-input" value="7000" step="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Additional Medicare Threshold ($)</label>
+                            <input type="number" id="additionalMedicareThreshold" class="form-input" value="200000" step="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Additional Medicare Rate (%)</label>
+                            <input type="number" id="additionalMedicareRate" class="form-input" value="0.9" step="0.1" min="0" max="5">
+                        </div>
+                    </div>
+                     <hr style="margin: 20px 0;">
                     <h4>Tax Payment Frequencies</h4>
                      <div class="form-grid">
                         <div class="form-group">
@@ -455,14 +475,14 @@
                                 <div class="summary-box">
                                     <div><strong>TOTAL EARNINGS:</strong> $<span id="paystubSummaryGross"></span></div>
                                     <div><strong>TOTAL TAXES:</strong> $<span id="paystubSummaryTaxes"></span></div>
-                                    <div><strong>TOTAL DEDUCTIONS:</strong> $0.00</div>
+                                    <div><strong>TOTAL DEDUCTIONS:</strong> $<span id="paystubSummaryDeductions">0.00</span></div>
                                 </div>
-                                
+
                                 <div class="summary-box">
                                     <div><strong>YTD TOTALS</strong></div>
                                     <div>Earnings: $<span id="paystubYTDEarnings"></span></div>
                                     <div>Taxes: $<span id="paystubYTDTaxes"></span></div>
-                                    <div>Deductions: $0.00</div>
+                                    <div>Deductions: $<span id="paystubYTDDeductions">0.00</span></div>
                                 </div>
                             </div>
                         </div>

@@ -21,6 +21,7 @@ const urlsToCache = [
   './js/db.js',
   './js/migration.js',
   './js/utils.js',
+  './js/validation.js',
   './icons/icon-192.png', // Also cache the main icons
   './icons/icon-512.png'
 ];

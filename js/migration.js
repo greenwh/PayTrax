@@ -69,6 +69,41 @@ function migrateToV4(data) {
 }
 
 /**
+ * Migrates data to v5 by adding deductions array to employees and configurable tax settings.
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV5(data) {
+    console.log("Running migration to v5...");
+
+    // Add deductions array to each employee
+    if (data.employees && Array.isArray(data.employees)) {
+        data.employees.forEach(emp => {
+            if (emp.deductions === undefined) {
+                emp.deductions = [];
+            }
+        });
+    }
+
+    // Add configurable tax settings
+    if (data.settings) {
+        if (data.settings.ssWageBase === undefined) {
+            data.settings.ssWageBase = 168600;
+        }
+        if (data.settings.futaWageBase === undefined) {
+            data.settings.futaWageBase = 7000;
+        }
+        if (data.settings.additionalMedicareThreshold === undefined) {
+            data.settings.additionalMedicareThreshold = 200000;
+        }
+        if (data.settings.additionalMedicareRate === undefined) {
+            data.settings.additionalMedicareRate = 0.9;
+        }
+    }
+
+    data.version = 5; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -86,12 +121,15 @@ export function migrateData(data) {
             migrateToV3(data);
             // Fall-through is intentional
         case 3:
-            migrateToV4(data); // New case for version 4 migration
+            migrateToV4(data);
+            // Fall-through is intentional
+        case 4:
+            migrateToV5(data);
             // Fall-through is intentional for future migrations
-            break; 
-        // case 4:
-        //     migrateToV5(data); // Add future migrations here
-        //     break; 
+            break;
+        // case 5:
+        //     migrateToV6(data); // Add future migrations here
+        //     break;
         // ...and so on.
     }
 

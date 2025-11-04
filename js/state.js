@@ -11,9 +11,9 @@ import * as db from './db.js';
 
 // --- CONFIGURATION & DEFAULT STATE ---
 
-export const CURRENT_VERSION = 4; // Incremented from 3 to 4
+export const CURRENT_VERSION = 5; // Incremented from 4 to 5
 
-// Constants for tax calculations
+// Constants for tax calculations (now also in settings for configurability)
 export const SS_WAGE_BASE = 168600;
 export const FUTA_WAGE_BASE = 7000;
 let dbInitialized = false;
@@ -33,6 +33,10 @@ export const defaultAppData = {
         medicare: 1.45,
         sutaRate: 2.7,
         futaRate: 0.6,
+        ssWageBase: 168600,
+        futaWageBase: 7000,
+        additionalMedicareThreshold: 200000,
+        additionalMedicareRate: 0.9,
         taxFrequencies: {
             federal: 'monthly',
             futa: 'quarterly',
@@ -123,11 +127,32 @@ export async function loadData() {
         if (appData.settings.daysUntilPayday === undefined) {
             appData.settings.daysUntilPayday = 5;
         }
+        // Add v5 settings for backward compatibility
+        if (appData.settings.ssWageBase === undefined) {
+            appData.settings.ssWageBase = defaultAppData.settings.ssWageBase;
+        }
+        if (appData.settings.futaWageBase === undefined) {
+            appData.settings.futaWageBase = defaultAppData.settings.futaWageBase;
+        }
+        if (appData.settings.additionalMedicareThreshold === undefined) {
+            appData.settings.additionalMedicareThreshold = defaultAppData.settings.additionalMedicareThreshold;
+        }
+        if (appData.settings.additionalMedicareRate === undefined) {
+            appData.settings.additionalMedicareRate = defaultAppData.settings.additionalMedicareRate;
+        }
         // Gracefully handle the 'reconciled' property for data loaded from browser storage
         if (appData.bankRegister && Array.isArray(appData.bankRegister)) {
             appData.bankRegister.forEach(t => {
                 if (t.reconciled === undefined) {
                     t.reconciled = false;
+                }
+            });
+        }
+        // Gracefully handle the 'deductions' property for employees
+        if (appData.employees && Array.isArray(appData.employees)) {
+            appData.employees.forEach(emp => {
+                if (emp.deductions === undefined) {
+                    emp.deductions = [];
                 }
             });
         }
