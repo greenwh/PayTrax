@@ -491,8 +491,8 @@ function parseTransactionFromCsv(row, format) {
         // Format 1: Account,Date,Pending?,Description,Category,Check,Credit,Debit
         date = row[1];
         description = row[3];
-        credit = parseFloat(row[6]) || 0;
-        debit = parseFloat(row[7]) || 0;
+        credit = Math.abs(parseFloat(row[6]) || 0);
+        debit = Math.abs(parseFloat(row[7]) || 0);
     } else if (format === 2) {
         // Format 2: Date,Description,Original Description,Category,Amount,Status
         date = row[0];
@@ -509,8 +509,8 @@ function parseTransactionFromCsv(row, format) {
         // Format 3: Account Number,Post Date,Check,Description,Debit,Credit
         date = row[1];
         description = row[3];
-        debit = parseFloat(row[4]) || 0;
-        credit = parseFloat(row[5]) || 0;
+        debit = Math.abs(parseFloat(row[4]) || 0);
+        credit = Math.abs(parseFloat(row[5]) || 0);
     } else {
         return null;
     }
