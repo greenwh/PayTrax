@@ -70,13 +70,16 @@ export function exportPayStubToPDF(employeeId, periodNum) {
     doc.text(`Pay Period: ${period.startDate} - ${period.endDate}`, 20, employeeInfoY + 7);
     doc.text(`Pay Date: ${period.payDate}`, 20, employeeInfoY + 14);
 
-    // Hours and earnings table
+    // Calculate YTD earnings
+    const ytdEarnings = calculateYTDEarnings(employeeId, periodNum);
+
+    // Hours and earnings table with YTD
     const earningsData = [
-        ['Type', 'Hours', 'Rate', 'Amount'],
-        ['Regular', (period.hours.regular || 0).toFixed(2), `$${employee.rate.toFixed(2)}`, `$${(period.earnings.regular || 0).toFixed(2)}`],
-        ['Overtime', (period.hours.overtime || 0).toFixed(2), `$${(employee.rate * employee.overtimeMultiplier).toFixed(2)}`, `$${(period.earnings.overtime || 0).toFixed(2)}`],
-        ['Holiday', (period.hours.holiday || 0).toFixed(2), `$${(employee.rate * employee.holidayMultiplier).toFixed(2)}`, `$${(period.earnings.holiday || 0).toFixed(2)}`],
-        ['PTO', (period.hours.pto || 0).toFixed(2), `$${employee.rate.toFixed(2)}`, `$${(period.earnings.pto || 0).toFixed(2)}`]
+        ['Type', 'Hours', 'Rate', 'Current', 'YTD'],
+        ['Regular', (period.hours.regular || 0).toFixed(2), `$${employee.rate.toFixed(2)}`, `$${(period.earnings.regular || 0).toFixed(2)}`, `$${ytdEarnings.regular.toFixed(2)}`],
+        ['Overtime', (period.hours.overtime || 0).toFixed(2), `$${(employee.rate * employee.overtimeMultiplier).toFixed(2)}`, `$${(period.earnings.overtime || 0).toFixed(2)}`, `$${ytdEarnings.overtime.toFixed(2)}`],
+        ['Holiday', (period.hours.holiday || 0).toFixed(2), `$${(employee.rate * employee.holidayMultiplier).toFixed(2)}`, `$${(period.earnings.holiday || 0).toFixed(2)}`, `$${ytdEarnings.holiday.toFixed(2)}`],
+        ['PTO', (period.hours.pto || 0).toFixed(2), `$${employee.rate.toFixed(2)}`, `$${(period.earnings.pto || 0).toFixed(2)}`, `$${ytdEarnings.pto.toFixed(2)}`]
     ];
 
     const tableStartY = employee.address ? 90 : 82;
@@ -124,16 +127,55 @@ export function exportPayStubToPDF(employeeId, periodNum) {
         });
     }
 
-    // Summary
-    const summaryY = doc.lastAutoTable.finalY + 10;
-    doc.setFontSize(12);
-    doc.text(`Gross Pay: $${period.grossPay.toFixed(2)}`, 20, summaryY);
-    doc.text(`Total Taxes: $${period.taxes.total.toFixed(2)}`, 20, summaryY + 7);
-    doc.text(`Total Deductions: $${(period.totalDeductions || 0).toFixed(2)}`, 20, summaryY + 14);
+    // Calculate YTD totals
+    const ytdGross = ytdEarnings.regular + ytdEarnings.overtime + ytdEarnings.holiday + ytdEarnings.pto;
+    const ytdTaxes = calculateYTDTotal(employeeId, periodNum, ['federal', 'fica', 'medicare', 'state', 'local']);
+    const ytdDeductions = calculateYTDDeductions(employeeId, periodNum);
 
+    // Current Period Summary
+    let summaryY = doc.lastAutoTable.finalY + 10;
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('CURRENT PERIOD TOTALS', 20, summaryY);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+    doc.text(`Gross Pay: $${period.grossPay.toFixed(2)}`, 20, summaryY + 7);
+    doc.text(`Total Taxes: $${period.taxes.total.toFixed(2)}`, 20, summaryY + 14);
+    doc.text(`Total Deductions: $${(period.totalDeductions || 0).toFixed(2)}`, 20, summaryY + 21);
+
+    // YTD Summary
+    summaryY = summaryY + 32;
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('YEAR-TO-DATE TOTALS', 20, summaryY);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+    doc.text(`YTD Earnings: $${ytdGross.toFixed(2)}`, 20, summaryY + 7);
+    doc.text(`YTD Taxes: $${ytdTaxes.toFixed(2)}`, 20, summaryY + 14);
+    doc.text(`YTD Deductions: $${ytdDeductions.toFixed(2)}`, 20, summaryY + 21);
+
+    // Net Pay
+    summaryY = summaryY + 32;
     doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text(`Net Pay: $${period.netPay.toFixed(2)}`, 20, summaryY + 24);
+    doc.text(`NET PAY: $${period.netPay.toFixed(2)}`, 20, summaryY);
+
+    // PTO Summary
+    const ptoUsed = period.hours.pto || 0;
+    const ptoEarned = period.ptoAccrued || 0;
+    const ptoEnd = employee.ptoBalance || 0;
+    const ptoBegin = (ptoEnd - ptoEarned) + ptoUsed;
+
+    summaryY = summaryY + 15;
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('PAID TIME OFF SUMMARY', 20, summaryY);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+    doc.text(`Beginning: ${ptoBegin.toFixed(2)} hrs`, 20, summaryY + 7);
+    doc.text(`Earned: ${ptoEarned.toFixed(2)} hrs`, 70, summaryY + 7);
+    doc.text(`Used: ${ptoUsed.toFixed(2)} hrs`, 120, summaryY + 7);
+    doc.text(`Ending Balance: ${ptoEnd.toFixed(2)} hrs`, 20, summaryY + 14);
 
     // Save
     doc.save(`PayStub_${employee.name.replace(/\s+/g, '_')}_${period.payDate}.pdf`);
@@ -152,6 +194,56 @@ function calculateYTD(employeeId, periodNum, taxType) {
         }
     }
     return `$${ytd.toFixed(2)}`;
+}
+
+/**
+ * Helper function to calculate YTD earnings by type
+ */
+function calculateYTDEarnings(employeeId, periodNum) {
+    const periods = appData.payPeriods[employeeId] || [];
+    const ytd = { regular: 0, overtime: 0, holiday: 0, pto: 0 };
+    for (let i = 0; i < periodNum; i++) {
+        const p = periods[i];
+        if (p && p.earnings) {
+            ytd.regular += p.earnings.regular || 0;
+            ytd.overtime += p.earnings.overtime || 0;
+            ytd.holiday += p.earnings.holiday || 0;
+            ytd.pto += p.earnings.pto || 0;
+        }
+    }
+    return ytd;
+}
+
+/**
+ * Helper function to calculate YTD total for multiple tax types
+ */
+function calculateYTDTotal(employeeId, periodNum, taxTypes) {
+    const periods = appData.payPeriods[employeeId] || [];
+    let total = 0;
+    for (let i = 0; i < periodNum; i++) {
+        const p = periods[i];
+        if (p && p.taxes) {
+            taxTypes.forEach(type => {
+                total += p.taxes[type] || 0;
+            });
+        }
+    }
+    return total;
+}
+
+/**
+ * Helper function to calculate YTD deductions
+ */
+function calculateYTDDeductions(employeeId, periodNum) {
+    const periods = appData.payPeriods[employeeId] || [];
+    let ytd = 0;
+    for (let i = 0; i < periodNum; i++) {
+        const p = periods[i];
+        if (p && p.totalDeductions) {
+            ytd += p.totalDeductions;
+        }
+    }
+    return ytd;
 }
 
 /**
