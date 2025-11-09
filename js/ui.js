@@ -464,6 +464,7 @@ export function renderReportUI() {
             if (reportType === 'daterange-employer') {
                 reportHTML = logic.generateDateRangeEmployerReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
                 exportButtons = `
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employer" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}">Export to CSV</button>
                     <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="daterange" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}" data-subtype="employer">Export to PDF</button>
                 `;
             }

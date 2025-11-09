@@ -1189,6 +1189,81 @@ export function exportDateRangeEmployeeReportToCSV(startDateStr, endDateStr, emp
 }
 
 /**
+ * Exports the Date Range Employer Report to CSV
+ * @param {string} startDateStr - Start date in YYYY-MM-DD format
+ * @param {string} endDateStr - End date in YYYY-MM-DD format
+ * @param {string} employeeId - Employee ID or 'all'
+ */
+export function exportDateRangeEmployerReportToCSV(startDateStr, endDateStr, employeeId) {
+    const start = new Date(startDateStr + 'T00:00:00');
+    const end = new Date(endDateStr + 'T23:59:59');
+
+    const employeeIdsToReport = employeeId === 'all' ? appData.employees.map(e => e.id) : [employeeId];
+    const allPayPeriods = [].concat.apply([], employeeIdsToReport.map(id => appData.payPeriods[id] || []));
+
+    const periodsInRange = allPayPeriods.filter(p => {
+        const payDate = new Date(p.payDate);
+        return payDate >= start && payDate <= end && p.grossPay > 0;
+    }).sort((a,b) => new Date(a.payDate) - new Date(b.payDate));
+
+    let csvContent = "Pay Date,Hours,Gross Pay,Employer FICA,Employer Medicare,SUTA,FUTA,Total Cost\n";
+
+    if (employeeId === 'all') {
+        // Group by pay date for all employees
+        const groupedByPayDate = periodsInRange.reduce((acc, p) => {
+            if (!acc[p.payDate]) {
+                acc[p.payDate] = { gross: 0, employerFica: 0, employerMedicare: 0, suta: 0, futa: 0, hours: 0 };
+            }
+            const group = acc[p.payDate];
+            group.hours += Object.values(p.hours).reduce((a,b) => a + b, 0);
+            group.gross += p.grossPay;
+            group.employerFica += p.taxes.fica;
+            group.employerMedicare += p.taxes.medicare;
+            group.suta += p.taxes.suta;
+            group.futa += p.taxes.futa;
+            return acc;
+        }, {});
+
+        for (const [payDate, totals] of Object.entries(groupedByPayDate)) {
+            const totalPeriodCost = totals.gross + totals.employerFica + totals.employerMedicare + totals.suta + totals.futa;
+            const row = [
+                payDate,
+                totals.hours.toFixed(2),
+                totals.gross.toFixed(2),
+                totals.employerFica.toFixed(2),
+                totals.employerMedicare.toFixed(2),
+                totals.suta.toFixed(2),
+                totals.futa.toFixed(2),
+                totalPeriodCost.toFixed(2)
+            ].join(',');
+            csvContent += row + "\n";
+        }
+    } else {
+        // Individual employee periods
+        periodsInRange.forEach(period => {
+            const totalHours = Object.values(period.hours).reduce((a,b) => a + b, 0);
+            const employerFica = period.taxes.fica;
+            const employerMedicare = period.taxes.medicare;
+            const totalPeriodCost = period.grossPay + employerFica + employerMedicare + period.taxes.suta + period.taxes.futa;
+            const row = [
+                period.payDate,
+                totalHours.toFixed(2),
+                period.grossPay.toFixed(2),
+                employerFica.toFixed(2),
+                employerMedicare.toFixed(2),
+                period.taxes.suta.toFixed(2),
+                period.taxes.futa.toFixed(2),
+                totalPeriodCost.toFixed(2)
+            ].join(',');
+            csvContent += row + "\n";
+        });
+    }
+
+    const employeeName = employeeId === 'all' ? 'All_Employees' : appData.employees.find(e => e.id === employeeId).name.replace(/\s+/g, '_');
+    downloadCSV(csvContent, `PayTrax_Employer_Costs_${employeeName}_${startDateStr}_to_${endDateStr}.csv`);
+}
+
+/**
  * Helper function to download CSV file
  * @param {string} csvContent - The CSV content
  * @param {string} filename - The filename for download

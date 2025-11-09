@@ -291,6 +291,9 @@ function setupEventListeners() {
                 case 'daterange-employee':
                     logic.exportDateRangeEmployeeReportToCSV(start, end, employeeId);
                     break;
+                case 'daterange-employer':
+                    logic.exportDateRangeEmployerReportToCSV(start, end, employeeId);
+                    break;
             }
         }
 
