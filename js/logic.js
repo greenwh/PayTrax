@@ -828,7 +828,7 @@ export function generate941Report(periodStr) {
 
     return `
         <h4>Quarterly Payroll Tax Report (Form 941) - ${title}</h4>
-        <p class="alert alert-info" style="font-size: 0.9em;">This report provides data for Form 941 quarterly federal tax return. Assumes timely tax deposits per your Tax Deposit reports. Total deposits should equal total liability, resulting in \$0.00 balance due.</p>
+        <p class="alert alert-secondary" style="font-size: 0.9em;">This report provides data for Form 941 quarterly federal tax return. Assumes timely tax deposits per your Tax Deposit reports. Total deposits should equal total liability, resulting in \$0.00 balance due.</p>
         <h5>Quarterly Summary</h5>
         <table class="report-table">
             <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
@@ -933,7 +933,7 @@ export function generate940Report(yearStr) {
 
     return `
         <h4>Annual Federal Unemployment (FUTA) Tax Report (Form 940) - ${year}</h4>
-         <p class="alert alert-info" style="font-size: 0.9em;">This report provides data for Form 940 annual federal unemployment tax return. Assumes you are not in a credit reduction state and have made all tax deposits on time. Total deposits should equal total tax, resulting in \$0.00 balance due.</p>
+         <p class="alert alert-secondary" style="font-size: 0.9em;">This report provides data for Form 940 annual federal unemployment tax return. Assumes you are not in a credit reduction state and have made all tax deposits on time. Total deposits should equal total tax, resulting in \$0.00 balance due.</p>
         <h5>FUTA Tax Calculation</h5>
         <table class="report-table">
             <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
