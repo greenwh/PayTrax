@@ -129,6 +129,14 @@ body {
     margin-bottom: 25px;
 }
 
+/* Compact grid for hour entry - fits 4 inputs on one line */
+.hour-entry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
 .form-group {
     margin-bottom: 20px;
 }
@@ -423,6 +431,10 @@ body {
     
     .form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .hour-entry-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
     
     .pay-info {
