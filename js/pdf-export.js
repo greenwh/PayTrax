@@ -160,13 +160,23 @@ export function exportPayStubToPDF(employeeId, periodNum) {
     doc.setFont(undefined, 'bold');
     doc.text(`NET PAY: $${period.netPay.toFixed(2)}`, 20, summaryY);
 
-    // PTO Summary
+    // PTO Summary - check if we need a new page
+    summaryY = summaryY + 15;
+
+    // If PTO section would overflow the page (need ~30mm space), add new page
+    const pageHeight = doc.internal.pageSize.height;
+    const bottomMargin = 20; // Reserve 20mm from bottom
+
+    if (summaryY + 30 > pageHeight - bottomMargin) {
+        doc.addPage();
+        summaryY = 20; // Start from top of new page
+    }
+
     const ptoUsed = period.hours.pto || 0;
     const ptoEarned = period.ptoAccrued || 0;
     const ptoEnd = employee.ptoBalance || 0;
     const ptoBegin = (ptoEnd - ptoEarned) + ptoUsed;
 
-    summaryY = summaryY + 15;
     doc.setFontSize(11);
     doc.setFont(undefined, 'bold');
     doc.text('PAID TIME OFF SUMMARY', 20, summaryY);

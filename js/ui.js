@@ -315,16 +315,29 @@ export function renderPayStubUI(employeeId, periodNum) {
     document.getElementById('paystubYTDTaxes').textContent = ytdTaxesTotal.toFixed(2);
     document.getElementById('paystubNetPay').textContent = period.netPay.toFixed(2);
 
-    // Update deductions display
+    // Update deductions display - both totals and itemized
     const deductionsDisplay = period.totalDeductions || 0;
-    const deductionElements = document.querySelectorAll('[id*="Deductions"]');
-    deductionElements.forEach(el => {
-        if (el.id === 'paystubSummaryDeductions') {
-            el.textContent = deductionsDisplay.toFixed(2);
-        } else if (el.id === 'paystubYTDDeductions') {
-            el.textContent = ytdDeductions.toFixed(2);
-        }
-    });
+    document.getElementById('paystubSummaryDeductions').textContent = deductionsDisplay.toFixed(2);
+    document.getElementById('paystubYTDDeductions').textContent = ytdDeductions.toFixed(2);
+
+    // Populate itemized deductions table
+    const deductionsSection = document.getElementById('paystubDeductionsSection');
+    const deductionsBody = document.getElementById('paystubDeductionsBody');
+    deductionsBody.innerHTML = '';
+
+    if (period.deductions && period.deductions.length > 0) {
+        deductionsSection.style.display = 'block';
+        period.deductions.forEach(ded => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${ded.name}</td>
+                <td class="text-right">$${ded.calculatedAmount.toFixed(2)}</td>
+            `;
+            deductionsBody.appendChild(row);
+        });
+    } else {
+        deductionsSection.style.display = 'none';
+    }
 
     const ptoUsed = period.hours.pto;
     const ptoEarned = period.ptoAccrued;
