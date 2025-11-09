@@ -567,8 +567,12 @@ export function calculateDeductions(employee, grossPay, payDate = null) {
         applicableDeductions = employee.deductions.filter(ded => {
             // If deduction doesn't have createdDate (old data), apply it to all periods
             if (!ded.createdDate) return true;
+            // Convert both dates to Date objects for proper comparison
+            // payDate is in M/D/YYYY format, createdDate is in YYYY-MM-DD format
+            const payDateObj = new Date(payDate);
+            const createdDateObj = new Date(ded.createdDate);
             // Only apply if deduction was created on or before the pay date
-            return ded.createdDate <= payDate;
+            return createdDateObj <= payDateObj;
         });
     }
 
