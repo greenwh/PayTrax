@@ -38,10 +38,12 @@ function handleRegisterClick(event) {
     }
 
     if (reconcileCheckbox) {
+        // Prevent default to avoid double-toggle (browser toggles, then we toggle)
+        event.preventDefault();
         const transId = reconcileCheckbox.dataset.id;
         toggleTransactionReconciled(transId);
-        displayRegister();
-        saveData();
+        saveData(); // Save first to ensure data is persisted
+        displayRegister(); // Then redraw with correct state
     }
 
     if (editButton) {

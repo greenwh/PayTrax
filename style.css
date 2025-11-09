@@ -137,6 +137,27 @@ body {
     margin-bottom: 25px;
 }
 
+/* Compact grid for banking forms - fits 4 inputs on one line */
+.banking-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+/* Narrow inputs for dates and amounts in banking */
+.banking-date-input {
+    max-width: 160px;
+}
+
+.banking-amount-input {
+    max-width: 140px;
+}
+
+.banking-status-select {
+    max-width: 150px;
+}
+
 .form-group {
     margin-bottom: 20px;
 }
@@ -371,6 +392,12 @@ body {
     background-color: #f8f9fa;
 }
 
+/* Report Output Scrolling */
+#reportOutput {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* Alerts and Indicators */
 .alert {
     padding: 15px;
@@ -435,6 +462,10 @@ body {
 
     .hour-entry-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .banking-form-grid {
+        grid-template-columns: 1fr;
     }
     
     .pay-info {

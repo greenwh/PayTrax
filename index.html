@@ -621,10 +621,10 @@
                         <div class="card-header" style="background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);">Add New Transaction</div>
                         <div class="card-body">
                             <form id="transactionForm">
-                                <div class="form-grid">
+                                <div class="banking-form-grid">
                                     <div class="form-group">
                                         <label for="transDate" class="form-label">Date</label>
-                                        <input type="date" id="transDate" class="form-input" required>
+                                        <input type="date" id="transDate" class="form-input banking-date-input" required>
                                     </div>
                                     <div class="form-group">
                                         <label for="transDesc" class="form-label">Description</label>
@@ -639,7 +639,7 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="transAmount" class="form-label">Amount</label>
-                                        <input type="number" id="transAmount" class="form-input" placeholder="50.00" step="0.01" min="0" required>
+                                        <input type="number" id="transAmount" class="form-input banking-amount-input" placeholder="50.00" step="0.01" min="0" required>
                                     </div>
                                 </div>
                                 <div style="text-align: center;">
@@ -652,14 +652,14 @@
                     <div class="card" style="margin-top: 30px;">
                         <div class="card-header" style="background: linear-gradient(135deg, #17a2b8 0%, #1f9faf 100%);">Filter Transactions</div>
                         <div class="card-body">
-                            <form id="filterForm" class="form-grid">
+                            <form id="filterForm" class="banking-form-grid">
                                 <div class="form-group">
                                     <label for="filterStartDate" class="form-label">Start Date</label>
-                                    <input type="date" id="filterStartDate" class="form-input">
+                                    <input type="date" id="filterStartDate" class="form-input banking-date-input">
                                 </div>
                                 <div class="form-group">
                                     <label for="filterEndDate" class="form-label">End Date</label>
-                                    <input type="date" id="filterEndDate" class="form-input">
+                                    <input type="date" id="filterEndDate" class="form-input banking-date-input">
                                 </div>
                                 <div class="form-group">
                                     <label for="filterDescription" class="form-label">Description</label>
@@ -667,7 +667,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label for="filterStatus" class="form-label">Status</label>
-                                    <select id="filterStatus" class="form-input">
+                                    <select id="filterStatus" class="form-input banking-status-select">
                                         <option value="all">All</option>
                                         <option value="reconciled">Reconciled</option>
                                         <option value="uncleared">Uncleared</option>

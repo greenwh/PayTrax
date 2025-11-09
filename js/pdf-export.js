@@ -40,18 +40,35 @@ export function exportPayStubToPDF(employeeId, periodNum) {
 
     // Company header
     const companyName = appData.settings.companyName || 'Company Name';
+    const companyAddress = appData.settings.companyAddress || '';
     doc.setFontSize(18);
     doc.text(companyName, 105, 20, { align: 'center' });
 
+    if (companyAddress) {
+        doc.setFontSize(9);
+        doc.text(companyAddress, 105, 27, { align: 'center' });
+    }
+
     doc.setFontSize(14);
-    doc.text('Pay Stub', 105, 30, { align: 'center' });
+    doc.text('Pay Stub', 105, 35, { align: 'center' });
 
     // Employee info
     doc.setFontSize(10);
-    doc.text(`Employee: ${employee.name}`, 20, 45);
-    doc.text(`Employee ID: ${employee.idNumber}`, 20, 52);
-    doc.text(`Pay Period: ${period.startDate} - ${period.endDate}`, 20, 59);
-    doc.text(`Pay Date: ${period.payDate}`, 20, 66);
+    doc.text('PAY TO THE ORDER OF:', 20, 50);
+    doc.setFont(undefined, 'bold');
+    doc.text(employee.name.toUpperCase(), 20, 57);
+    doc.setFont(undefined, 'normal');
+
+    if (employee.address) {
+        doc.setFontSize(9);
+        doc.text(employee.address, 20, 63);
+        doc.setFontSize(10);
+    }
+
+    const employeeInfoY = employee.address ? 70 : 63;
+    doc.text(`Employee ID: ${employee.idNumber}`, 20, employeeInfoY);
+    doc.text(`Pay Period: ${period.startDate} - ${period.endDate}`, 20, employeeInfoY + 7);
+    doc.text(`Pay Date: ${period.payDate}`, 20, employeeInfoY + 14);
 
     // Hours and earnings table
     const earningsData = [
@@ -62,8 +79,9 @@ export function exportPayStubToPDF(employeeId, periodNum) {
         ['PTO', (period.hours.pto || 0).toFixed(2), `$${employee.rate.toFixed(2)}`, `$${(period.earnings.pto || 0).toFixed(2)}`]
     ];
 
+    const tableStartY = employee.address ? 90 : 82;
     doc.autoTable({
-        startY: 75,
+        startY: tableStartY,
         head: [earningsData[0]],
         body: earningsData.slice(1),
         theme: 'striped',
