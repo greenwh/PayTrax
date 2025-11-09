@@ -237,7 +237,7 @@ export function renderDeductionsTable(employeeId) {
     tbody.innerHTML = '';
 
     if (!employee.deductions || employee.deductions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; font-style:italic; color:#6c757d;">No deductions configured</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; font-style:italic; color:#6c757d;">No deductions configured</td></tr>';
         return;
     }
 
@@ -245,11 +245,13 @@ export function renderDeductionsTable(employeeId) {
         const row = document.createElement('tr');
         const typeDisplay = ded.type === 'fixed' ? `$${ded.amount.toFixed(2)}` : `${ded.amount.toFixed(2)}%`;
         const typeLabel = ded.type === 'fixed' ? 'Fixed' : 'Percent';
+        const effectiveDate = ded.createdDate || 'N/A';
 
         row.innerHTML = `
             <td>${ded.name}</td>
             <td>${typeLabel}</td>
             <td>${typeDisplay}</td>
+            <td>${effectiveDate}</td>
             <td>
                 <button class="btn btn-danger btn-sm delete-deduction-btn" data-deduction-id="${ded.id}">Delete</button>
             </td>
