@@ -155,6 +155,11 @@ body {
     box-shadow: 0 0 0 3px rgba(0,123,255,0.25);
 }
 
+/* Hour input fields - compact size */
+.hour-input {
+    max-width: 100px;
+}
+
 /* Buttons */
 .btn {
     padding: 12px 25px;

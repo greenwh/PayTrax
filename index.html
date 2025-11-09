@@ -72,20 +72,20 @@
                         <div class="card-body">
                             <div class="form-grid">
                                 <div class="form-group">
-                                    <label class="form-label">Regular Hours</label>
-                                    <input type="number" id="regularHours" class="form-input" placeholder="e.g., 40" step="0.25">
+                                    <label class="form-label">Regular</label>
+                                    <input type="number" id="regularHours" class="form-input hour-input" placeholder="40" step="0.25">
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Overtime Hours</label>
-                                    <input type="number" id="overtimeHours" class="form-input" placeholder="e.g., 5" step="0.25">
+                                    <label class="form-label">Overtime</label>
+                                    <input type="number" id="overtimeHours" class="form-input hour-input" placeholder="5" step="0.25">
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Paid Time Off (PTO) Hours</label>
-                                    <input type="number" id="ptoHours" class="form-input" placeholder="e.g., 8" step="0.25">
+                                    <label class="form-label">Paid Time Off</label>
+                                    <input type="number" id="ptoHours" class="form-input hour-input" placeholder="8" step="0.25">
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label">Holiday Hours</label>
-                                    <input type="number" id="holidayHours" class="form-input" placeholder="e.g., 8" step="0.25">
+                                    <label class="form-label">Holiday</label>
+                                    <input type="number" id="holidayHours" class="form-input hour-input" placeholder="8" step="0.25">
                                 </div>
                             </div>
                         </div>
@@ -678,6 +678,25 @@
                                 <button type="button" class="btn btn-secondary" id="clearFiltersBtn">Clear Filters</button>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="card" style="margin-top: 30px;">
+                         <div class="card-header" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">Import CSV</div>
+                         <div class="card-body">
+                            <p style="margin-bottom: 20px;">Import transactions from your bank's CSV export. Supports multiple formats with automatic detection.</p>
+                            <div class="form-group">
+                                <label class="form-label">Select CSV File</label>
+                                <input type="file" id="csvFileInput" class="form-input" accept=".csv">
+                            </div>
+                            <div style="text-align: center; margin-top: 15px;">
+                                <button class="btn btn-primary" id="importCsvSyncBtn">Sync Only (No Reconcile)</button>
+                                <button class="btn btn-success" id="importCsvReconcileBtn">Import & Auto-Reconcile</button>
+                            </div>
+                            <div class="alert alert-info" style="margin-top: 15px;">
+                                <strong>Sync Only:</strong> Adds new transactions only if they don't already exist (fuzzy match: ±2 days, ±$1).<br>
+                                <strong>Auto-Reconcile:</strong> Adds new transactions AND marks matched transactions as reconciled.
+                            </div>
+                         </div>
                     </div>
 
                     <div class="card" style="margin-top: 30px;">
