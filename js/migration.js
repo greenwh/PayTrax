@@ -104,6 +104,30 @@ function migrateToV5(data) {
 }
 
 /**
+ * Migrates from version 5 to version 6.
+ * - Adds createdDate to existing deductions (set to very old date for backward compatibility)
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV6(data) {
+    // Add createdDate to all existing deductions
+    if (data.employees && data.employees.length > 0) {
+        data.employees.forEach(employee => {
+            if (employee.deductions && employee.deductions.length > 0) {
+                employee.deductions.forEach(deduction => {
+                    // If deduction doesn't have createdDate, set to old date
+                    // This ensures existing deductions apply to all past pay periods
+                    if (!deduction.createdDate) {
+                        deduction.createdDate = '2000-01-01'; // Very old date ensures it applies to all periods
+                    }
+                });
+            }
+        });
+    }
+
+    data.version = 6; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -125,10 +149,13 @@ export function migrateData(data) {
             // Fall-through is intentional
         case 4:
             migrateToV5(data);
+            // Fall-through is intentional
+        case 5:
+            migrateToV6(data);
             // Fall-through is intentional for future migrations
             break;
-        // case 5:
-        //     migrateToV6(data); // Add future migrations here
+        // case 6:
+        //     migrateToV7(data); // Add future migrations here
         //     break;
         // ...and so on.
     }

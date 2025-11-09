@@ -154,6 +154,7 @@ function recalculatePeriod(employeeId, periodNum) {
     }
 
     const hours = period.hours; // Use existing hours from the period
+    const payDate = period.payDate; // Get pay date for deduction filtering
 
     const earnings = {
         regular: hours.regular * employee.rate,
@@ -192,8 +193,8 @@ function recalculatePeriod(employeeId, periodNum) {
 
     const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
 
-    // Calculate deductions
-    const { deductions, total: totalDeductions } = calculateDeductions(employee, grossPay);
+    // Calculate deductions (only apply those created on or before this pay date)
+    const { deductions, total: totalDeductions } = calculateDeductions(employee, grossPay, payDate);
 
     const netPay = grossPay - employeeTaxes - totalDeductions;
 
@@ -318,6 +319,8 @@ function recalculateSinglePeriodFromUI(employeeId, periodNum) {
         employee.taxRemainders = { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
     }
 
+    const payDate = period.payDate; // Get pay date for deduction filtering
+
     const hours = {
         regular: parseFloat(document.getElementById('regularHours').value) || 0,
         overtime: parseFloat(document.getElementById('overtimeHours').value) || 0,
@@ -364,8 +367,8 @@ function recalculateSinglePeriodFromUI(employeeId, periodNum) {
 
     const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
 
-    // Calculate deductions
-    const { deductions, total: totalDeductions } = calculateDeductions(employee, grossPay);
+    // Calculate deductions (only apply those created on or before this pay date)
+    const { deductions, total: totalDeductions } = calculateDeductions(employee, grossPay, payDate);
 
     const netPay = grossPay - employeeTaxes - totalDeductions;
 
@@ -503,7 +506,8 @@ export function addDeduction(employeeId, name, amount, type = 'fixed') {
         id: `ded_${new Date().getTime()}`,
         name: name,
         amount: parseFloat(amount),
-        type: type
+        type: type,
+        createdDate: new Date().toISOString().split('T')[0] // YYYY-MM-DD format
     };
 
     employee.deductions.push(deduction);
@@ -546,16 +550,29 @@ export function deleteDeduction(employeeId, deductionId) {
 
 /**
  * Calculates total deductions for an employee in a pay period.
+ * Only applies deductions that were created on or before the pay period date.
  * @param {object} employee - The employee object
  * @param {number} grossPay - The gross pay for the period
+ * @param {string} payDate - The pay date for the period (YYYY-MM-DD format)
  * @returns {object} - Object with deductions array and total
  */
-export function calculateDeductions(employee, grossPay) {
+export function calculateDeductions(employee, grossPay, payDate = null) {
     if (!employee.deductions || employee.deductions.length === 0) {
         return { deductions: [], total: 0 };
     }
 
-    const calculatedDeductions = employee.deductions.map(ded => {
+    // Filter deductions to only those created on or before the pay period date
+    let applicableDeductions = employee.deductions;
+    if (payDate) {
+        applicableDeductions = employee.deductions.filter(ded => {
+            // If deduction doesn't have createdDate (old data), apply it to all periods
+            if (!ded.createdDate) return true;
+            // Only apply if deduction was created on or before the pay date
+            return ded.createdDate <= payDate;
+        });
+    }
+
+    const calculatedDeductions = applicableDeductions.map(ded => {
         let amount = 0;
         if (ded.type === 'percent') {
             amount = (grossPay * ded.amount) / 100;

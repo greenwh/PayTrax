@@ -11,7 +11,7 @@ import * as db from './db.js';
 
 // --- CONFIGURATION & DEFAULT STATE ---
 
-export const CURRENT_VERSION = 5; // Incremented from 4 to 5
+export const CURRENT_VERSION = 6; // Incremented from 5 to 6
 
 // Constants for tax calculations (now also in settings for configurability)
 export const SS_WAGE_BASE = 168600;
