@@ -1,0 +1,12 @@
+# OneDrive Ignore File
+# Prevents syncing of files/folders to OneDrive while keeping them locally
+
+# Node dependencies (regenerate with npm install on each machine)
+node_modules/
+package-lock.json
+
+# Package-specific dependencies
+packages/*/node_modules/
+packages/*/package-lock.json
+dist/
+build/
