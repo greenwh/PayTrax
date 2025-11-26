@@ -139,14 +139,14 @@ function addTransactionFromForm() {
     addTransaction(formattedDate, desc, type, amount);
 }
 
-export function addTransaction(date, description, type, amount, id = null, silent = false) {
+export function addTransaction(date, description, type, amount, id = null, silent = false, reconciled = false) {
     if (amount <= 0 || !description || !date) return;
-    appData.bankRegister.push({ 
+    appData.bankRegister.push({
         id: id || `trans_${new Date().getTime()}`,
-        date, description, 
-        debit: type === 'debit' ? amount : 0, 
+        date, description,
+        debit: type === 'debit' ? amount : 0,
         credit: type === 'credit' ? amount : 0,
-        reconciled: false
+        reconciled: reconciled
     });
 }
 
@@ -308,9 +308,11 @@ function purgeTransactions(cutoffDateStr) {
     const year = openingBalanceDate.getFullYear();
     const openingBalanceDateStr = `${month}/${day}/${year}`;
 
-    // Remove all transactions on or before cutoff date
+    // Remove only reconciled transactions on or before cutoff date
     appData.bankRegister = appData.bankRegister.filter(t => {
-        return new Date(t.date) > cutoffDate;
+        const transDate = new Date(t.date);
+        // Keep transaction if: it's after cutoff OR it's not reconciled
+        return transDate > cutoffDate || t.reconciled === false;
     });
 
     // Add opening balance transaction (only if non-zero)
