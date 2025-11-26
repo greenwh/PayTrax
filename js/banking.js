@@ -76,9 +76,26 @@ function handlePurgeConfirm() {
 
     const count = getPurgeableCount(cutoffDate);
     if (confirm(`Are you sure you want to permanently delete ${count} reconciled transaction(s) on or before ${cutoffDate}? This cannot be undone.`)) {
+        // Calculate the opening balance before purging for the message
+        const cutoffDateObj = new Date(cutoffDate + 'T23:59:59');
+        const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
+        let openingBalance = 0;
+        for (const t of sortedRegister) {
+            if (new Date(t.date) <= cutoffDateObj) {
+                openingBalance += t.credit - t.debit;
+            } else {
+                break;
+            }
+        }
+
         const purgedCount = purgeTransactions(cutoffDate);
         hidePurgeModal();
-        alert(`${purgedCount} transaction(s) have been purged.`);
+
+        const message = openingBalance !== 0
+            ? `${purgedCount} transaction(s) have been purged. Opening balance of $${openingBalance.toFixed(2)} created.`
+            : `${purgedCount} transaction(s) have been purged.`;
+        alert(message);
+
         displayRegister();
         saveData();
     }
@@ -194,7 +211,7 @@ function enableEditMode(transId) {
                 </td>
                 <td>$${balanceMap.get(trans.id).toFixed(2)}</td>
                 <td style="text-align: center;">
-                    <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}" ${trans.reconciled ? 'checked' : ''}>
+                    <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}">
                 </td>
                 <td>
                     <button class="btn btn-success btn-sm save-transaction-btn" data-id="${trans.id}">Save</button>
@@ -209,7 +226,7 @@ function enableEditMode(transId) {
                 <td class="credit">${trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-'}</td>
                 <td>$${balanceMap.get(trans.id).toFixed(2)}</td>
                 <td style="text-align: center;">
-                    <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}" ${trans.reconciled ? 'checked' : ''}>
+                    <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}">
                 </td>
                 <td>
                     <button class="btn btn-primary btn-sm edit-transaction-btn" data-id="${trans.id}">Edit</button>
@@ -218,6 +235,12 @@ function enableEditMode(transId) {
             `;
         }
         tbody.appendChild(row);
+
+        // Set checkbox state programmatically after adding to DOM to avoid innerHTML issues
+        const checkbox = row.querySelector('.reconcile-checkbox');
+        if (checkbox) {
+            checkbox.checked = trans.reconciled === true;
+        }
     });
 
     const currentBalanceEl = document.getElementById('currentBalance');
@@ -254,12 +277,56 @@ function saveTransactionEdit(transId) {
 function purgeTransactions(cutoffDateStr) {
     const originalCount = appData.bankRegister.length;
     const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
-    
+
+    // Sort chronologically to calculate running balance
+    const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Find transactions to purge
+    const txsToPurge = sortedRegister.filter(t =>
+        t.reconciled && new Date(t.date) <= cutoffDate
+    );
+
+    if (txsToPurge.length === 0) {
+        return 0;
+    }
+
+    // Calculate running balance up through and including purge date
+    let openingBalance = 0;
+    for (const t of sortedRegister) {
+        if (new Date(t.date) <= cutoffDate) {
+            openingBalance += t.credit - t.debit;
+        } else {
+            break;
+        }
+    }
+
+    // Calculate date for opening balance (one day after purge date)
+    const openingBalanceDate = new Date(cutoffDate);
+    openingBalanceDate.setDate(openingBalanceDate.getDate() + 1);
+    const month = String(openingBalanceDate.getMonth() + 1).padStart(2, '0');
+    const day = String(openingBalanceDate.getDate()).padStart(2, '0');
+    const year = openingBalanceDate.getFullYear();
+    const openingBalanceDateStr = `${month}/${day}/${year}`;
+
+    // Remove all transactions on or before cutoff date
     appData.bankRegister = appData.bankRegister.filter(t => {
-        return new Date(t.date) > cutoffDate || t.reconciled === false;
+        return new Date(t.date) > cutoffDate;
     });
 
-    return originalCount - appData.bankRegister.length;
+    // Add opening balance transaction (only if non-zero)
+    if (openingBalance !== 0) {
+        const openingBalanceTx = {
+            id: `trans_opening_${new Date().getTime()}`,
+            date: openingBalanceDateStr,
+            description: 'Opening Balance',
+            debit: openingBalance < 0 ? Math.abs(openingBalance) : 0,
+            credit: openingBalance > 0 ? openingBalance : 0,
+            reconciled: true
+        };
+        appData.bankRegister.push(openingBalanceTx);
+    }
+
+    return originalCount - appData.bankRegister.length + (openingBalance !== 0 ? 1 : 0);
 }
 
 function getPurgeableCount(cutoffDateStr) {
@@ -379,7 +446,7 @@ export function displayRegister() {
             <td class="credit">${trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-'}</td>
             <td>$${balanceMap.get(trans.id).toFixed(2)}</td>
             <td style="text-align: center;">
-                <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}" ${trans.reconciled ? 'checked' : ''}>
+                <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}">
             </td>
             <td>
                 <button class="btn btn-primary btn-sm edit-transaction-btn" data-id="${trans.id}">Edit</button>
@@ -387,6 +454,12 @@ export function displayRegister() {
             </td>
         `;
         tbody.appendChild(row);
+
+        // Set checkbox state programmatically after adding to DOM to avoid innerHTML issues
+        const checkbox = row.querySelector('.reconcile-checkbox');
+        if (checkbox) {
+            checkbox.checked = trans.reconciled === true;
+        }
     });
     
     const currentBalanceEl = document.getElementById('currentBalance');
