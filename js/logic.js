@@ -88,7 +88,25 @@ export function generatePayPeriods() {
     appData.employees.forEach(emp => {
         const existingData = appData.payPeriods[emp.id] || [];
         appData.payPeriods[emp.id] = basePeriods.map((newPeriod) => {
-            const oldPeriod = existingData.find(p => p.period === newPeriod.period && new Date(p.startDate).getFullYear() === appData.settings.taxYear);
+            // Primary match: exact date match (for when settings haven't changed since last save)
+            let oldPeriod = existingData.find(p =>
+                p.period === newPeriod.period &&
+                p.startDate === newPeriod.startDate
+            );
+
+            // Secondary match: period number AND pay date year matches tax year
+            // This handles year-boundary pay periods (e.g., work week starts Dec 29, 2025
+            // but pay date is Jan 7, 2026 - this belongs to tax year 2026)
+            if (!oldPeriod) {
+                oldPeriod = existingData.find(p => {
+                    if (p.period !== newPeriod.period) return false;
+                    // Parse pay date year - stored in M/D/YYYY format
+                    const payDateParts = p.payDate.split('/');
+                    const payDateYear = parseInt(payDateParts[2], 10);
+                    return payDateYear === appData.settings.taxYear;
+                });
+            }
+
             const totalHours = oldPeriod && oldPeriod.hours ? Object.values(oldPeriod.hours).reduce((a, b) => a + b, 0) : 0;
             if (oldPeriod && totalHours > 0) {
                 return { ...oldPeriod, startDate: newPeriod.startDate, endDate: newPeriod.endDate, payDate: newPeriod.payDate };
