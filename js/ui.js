@@ -55,6 +55,7 @@ export function displaySettings() {
     document.getElementById('sutaTaxFrequency').value = settings.taxFrequencies.suta;
     document.getElementById('stateTaxFrequency').value = settings.taxFrequencies.state;
     document.getElementById('localTaxFrequency').value = settings.taxFrequencies.local;
+    document.getElementById('autoSubtraction').checked = settings.autoSubtraction !== false;
 }
 
 /**

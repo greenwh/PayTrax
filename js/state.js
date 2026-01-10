@@ -11,7 +11,7 @@ import * as db from './db.js';
 
 // --- CONFIGURATION & DEFAULT STATE ---
 
-export const CURRENT_VERSION = 6; // Incremented from 5 to 6
+export const CURRENT_VERSION = 7; // Incremented from 6 to 7
 
 // Constants for tax calculations (now also in settings for configurability)
 export const SS_WAGE_BASE = 168600;
@@ -43,7 +43,8 @@ export const defaultAppData = {
             suta: 'quarterly',
             state: 'monthly',
             local: 'monthly'
-        }
+        },
+        autoSubtraction: true
     },
     employees: [],
     payPeriods: {},
@@ -155,6 +156,10 @@ export async function loadData() {
                     emp.deductions = [];
                 }
             });
+        }
+        // Add autoSubtraction setting for backward compatibility (v7)
+        if (appData.settings.autoSubtraction === undefined) {
+            appData.settings.autoSubtraction = true;
         }
     } else {
         // Use a deep copy of the default data if nothing is found anywhere

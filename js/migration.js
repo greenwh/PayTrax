@@ -128,6 +128,22 @@ function migrateToV6(data) {
 }
 
 /**
+ * Migrates from version 6 to version 7.
+ * - Adds autoSubtraction setting (defaults to true for existing behavior)
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV7(data) {
+    console.log("Running migration to v7...");
+
+    // Add autoSubtraction setting
+    if (data.settings && data.settings.autoSubtraction === undefined) {
+        data.settings.autoSubtraction = true;
+    }
+
+    data.version = 7; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -152,10 +168,13 @@ export function migrateData(data) {
             // Fall-through is intentional
         case 5:
             migrateToV6(data);
+            // Fall-through is intentional
+        case 6:
+            migrateToV7(data);
             // Fall-through is intentional for future migrations
             break;
-        // case 6:
-        //     migrateToV7(data); // Add future migrations here
+        // case 7:
+        //     migrateToV8(data); // Add future migrations here
         //     break;
         // ...and so on.
     }

@@ -240,15 +240,17 @@ function recalculatePeriod(employeeId, periodNum) {
     period.deductions = deductions;
     period.totalDeductions = totalDeductions;
 
-    // Update Bank Register
-    const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
-    const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;
-    // Preserve reconciled status before removing
-    const existingTransaction = appData.bankRegister.find(t => t.id === transactionId);
-    const wasReconciled = existingTransaction ? existingTransaction.reconciled : false;
-    appData.bankRegister = appData.bankRegister.filter(t => t.id !== transactionId);
-    if (totalPayrollCost > 0) {
-        addTransaction(period.payDate, `Payroll: ${employee.name} - P${period.period}`, 'debit', totalPayrollCost, transactionId, true, wasReconciled);
+    // Update Bank Register (only if autoSubtraction is enabled)
+    if (appData.settings.autoSubtraction !== false) {
+        const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
+        const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;
+        // Preserve reconciled status before removing
+        const existingTransaction = appData.bankRegister.find(t => t.id === transactionId);
+        const wasReconciled = existingTransaction ? existingTransaction.reconciled : false;
+        appData.bankRegister = appData.bankRegister.filter(t => t.id !== transactionId);
+        if (totalPayrollCost > 0) {
+            addTransaction(period.payDate, `Payroll: ${employee.name} - P${period.period}`, 'debit', totalPayrollCost, transactionId, true, wasReconciled);
+        }
     }
 }
 
@@ -417,15 +419,17 @@ function recalculateSinglePeriodFromUI(employeeId, periodNum) {
     period.deductions = deductions;
     period.totalDeductions = totalDeductions;
 
-    // --- Update Bank Register ---
-    const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
-    const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;
-    // Preserve reconciled status before removing
-    const existingTransaction = appData.bankRegister.find(t => t.id === transactionId);
-    const wasReconciled = existingTransaction ? existingTransaction.reconciled : false;
-    appData.bankRegister = appData.bankRegister.filter(t => t.id !== transactionId);
-    if (totalPayrollCost > 0) {
-         addTransaction(period.payDate, `Payroll: ${employee.name} - P${period.period}`, 'debit', totalPayrollCost, transactionId, true, wasReconciled);
+    // --- Update Bank Register (only if autoSubtraction is enabled) ---
+    if (appData.settings.autoSubtraction !== false) {
+        const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
+        const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;
+        // Preserve reconciled status before removing
+        const existingTransaction = appData.bankRegister.find(t => t.id === transactionId);
+        const wasReconciled = existingTransaction ? existingTransaction.reconciled : false;
+        appData.bankRegister = appData.bankRegister.filter(t => t.id !== transactionId);
+        if (totalPayrollCost > 0) {
+            addTransaction(period.payDate, `Payroll: ${employee.name} - P${period.period}`, 'debit', totalPayrollCost, transactionId, true, wasReconciled);
+        }
     }
 }
 
@@ -647,6 +651,7 @@ export function updateSettingsFromUI() {
     appData.settings.taxFrequencies.suta = document.getElementById('sutaTaxFrequency').value;
     appData.settings.taxFrequencies.state = document.getElementById('stateTaxFrequency').value;
     appData.settings.taxFrequencies.local = document.getElementById('localTaxFrequency').value;
+    appData.settings.autoSubtraction = document.getElementById('autoSubtraction').checked;
 }
 
 
