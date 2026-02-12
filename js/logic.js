@@ -155,10 +155,12 @@ export function recalculateAllPeriodsForEmployee(employeeId) {
  * Recalculates a single pay period using the hours already stored in that period.
  * This function does NOT read from UI - it uses stored period data.
  * Used by recalculateAllPeriodsForEmployee to process periods sequentially.
+ * This is a pure function that can be tested directly.
  * @param {string} employeeId - The ID of the employee
  * @param {number} periodNum - The period number to recalculate
+ * @returns {object|null} The recalculated period, or null if invalid
  */
-function recalculatePeriod(employeeId, periodNum) {
+export function recalculatePeriod(employeeId, periodNum) {
     const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
     if (employeeIndex === -1) return;
 
@@ -252,6 +254,8 @@ function recalculatePeriod(employeeId, periodNum) {
             addTransaction(period.payDate, `Payroll: ${employee.name} - P${period.period}`, 'debit', totalPayrollCost, transactionId, true, wasReconciled);
         }
     }
+
+    return period;
 }
 
 /**
@@ -280,46 +284,74 @@ export function updateHoursFromPeriod(employeeId, periodNum) {
 }
 
 /**
- * Calculates pay based on the hours in the UI and updates the appData object.
- * This function now uses a "running remainder" strategy for tax calculations.
- * If editing an earlier period, it will trigger sequential recalculation of all subsequent periods.
+ * Calculates pay from provided data without DOM dependency.
+ * This is the pure function that can be tested directly.
+ * @param {string} employeeId - The ID of the employee
+ * @param {number} periodNum - The period number to calculate
+ * @param {object} hours - Object containing { regular, overtime, pto, holiday } hours
+ * @returns {object|null} The calculated period object, or null if invalid inputs
  */
-export function calculatePay() {
-    const employeeId = document.getElementById('currentEmployee').value;
-    const periodNum = parseInt(document.getElementById('currentPeriod').value);
-
-    if (!employeeId || !periodNum) return;
+export function calculatePayFromData(employeeId, periodNum, hours) {
+    if (!employeeId || !periodNum) return null;
 
     const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
-    if (employeeIndex === -1) return;
+    if (employeeIndex === -1) return null;
 
-    const employee = appData.employees[employeeIndex];
-    const period = appData.payPeriods[employeeId].find(p => p.period == periodNum);
-    if (!period) return;
+    const periods = appData.payPeriods[employeeId];
+    if (!periods) return null;
+
+    const period = periods.find(p => p.period == periodNum);
+    if (!period) return null;
+
+    // Store the hours into the period
+    period.hours = {
+        regular: parseFloat(hours.regular) || 0,
+        overtime: parseFloat(hours.overtime) || 0,
+        pto: parseFloat(hours.pto) || 0,
+        holiday: parseFloat(hours.holiday) || 0,
+    };
 
     // Detect if we're editing an earlier period with subsequent periods already calculated
-    const allPeriods = appData.payPeriods[employeeId] || [];
-    const hasLaterPeriodsWithData = allPeriods.some(p => {
+    const hasLaterPeriodsWithData = periods.some(p => {
         const laterPeriod = p.period > periodNum;
         const hasHours = p.hours && Object.values(p.hours).reduce((a, b) => a + b, 0) > 0;
         return laterPeriod && hasHours;
     });
 
-    // Store the hours from UI into the period first
-    period.hours = {
-        regular: parseFloat(document.getElementById('regularHours').value) || 0,
-        overtime: parseFloat(document.getElementById('overtimeHours').value) || 0,
-        pto: parseFloat(document.getElementById('ptoHours').value) || 0,
-        holiday: parseFloat(document.getElementById('holidayHours').value) || 0,
-    };
-
     // If editing an earlier period, recalculate everything from Period 1 forward
     if (hasLaterPeriodsWithData) {
         recalculateAllPeriodsForEmployee(employeeId);
     } else {
-        // Otherwise, just calculate this single period normally
-        recalculateSinglePeriodFromUI(employeeId, periodNum);
+        // Otherwise, just calculate this single period
+        recalculatePeriod(employeeId, periodNum);
     }
+
+    // Return the updated period for testing
+    return appData.payPeriods[employeeId].find(p => p.period == periodNum);
+}
+
+/**
+ * Calculates pay based on the hours in the UI and updates the appData object.
+ * This function now uses a "running remainder" strategy for tax calculations.
+ * If editing an earlier period, it will trigger sequential recalculation of all subsequent periods.
+ * This is the UI wrapper that reads from DOM and calls the pure function.
+ */
+export function calculatePay() {
+    const employeeId = document.getElementById('currentEmployee')?.value;
+    const periodNum = parseInt(document.getElementById('currentPeriod')?.value);
+
+    if (!employeeId || !periodNum) return;
+
+    // Read hours from DOM
+    const hours = {
+        regular: parseFloat(document.getElementById('regularHours')?.value) || 0,
+        overtime: parseFloat(document.getElementById('overtimeHours')?.value) || 0,
+        pto: parseFloat(document.getElementById('ptoHours')?.value) || 0,
+        holiday: parseFloat(document.getElementById('holidayHours')?.value) || 0,
+    };
+
+    // Call the pure function with DOM values
+    return calculatePayFromData(employeeId, periodNum, hours);
 }
 
 /**
@@ -657,34 +689,47 @@ export function updateSettingsFromUI() {
 
 // --- REPORTING LOGIC ---
 
-export function generateTaxDepositReport() {
-    const selectedFreq = document.getElementById('reportTaxFrequency').value;
+/**
+ * Generates a tax deposit report from provided data (pure function for testing).
+ * This calculates the tax liabilities due for a specific period based on deposit frequency.
+ * @param {string} selectedFreq - Deposit frequency: 'weekly', 'bi-weekly', 'monthly', 'quarterly', 'annual'
+ * @param {string} periodInput - For monthly/quarterly/annual: period string like "June 2024", "Q1 2024"
+ * @param {string} payDate - For weekly/bi-weekly: the specific pay date string
+ * @returns {object} Report data: { reportTitle, liabilities, totalDeposit, html, periodsIncluded }
+ */
+export function generateTaxDepositReportFromData(selectedFreq, periodInput = null, payDate = null) {
     const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods)).filter(p => p.grossPay > 0);
     let periodsInDepositRange = [];
     let reportTitle = '';
 
     if (['weekly', 'bi-weekly'].includes(selectedFreq)) {
-        const selectedPayDate = document.getElementById('reportPayPeriod').value;
-        if (!selectedPayDate) return `<div class="alert alert-info">Please select a pay period.</div>`;
-        periodsInDepositRange = allPayPeriods.filter(p => p.payDate === selectedPayDate);
-        reportTitle = `Tax Deposit for Pay Date: ${selectedPayDate}`;
+        if (!payDate) return { error: 'Please select a pay period.', liabilities: {}, totalDeposit: 0, periodsIncluded: 0 };
+        periodsInDepositRange = allPayPeriods.filter(p => p.payDate === payDate);
+        reportTitle = `Tax Deposit for Pay Date: ${payDate}`;
     } else {
-        const periodInput = document.getElementById('reportPeriodText').value;
-        if (!periodInput) return `<div class="alert alert-info">Please enter a period (e.g., June, Q2, 2025).</div>`;
+        if (!periodInput) return { error: 'Please enter a period (e.g., June, Q2, 2025).', liabilities: {}, totalDeposit: 0, periodsIncluded: 0 };
         const { start, end, title } = parseDateInput(periodInput, selectedFreq);
-        if (!start || !end) return `<div class="alert alert-info">Invalid period format. Use formats like "June 2025", "Q2 2025", or "08/25".</div>`;
-        
+        if (!start || !end) return { error: 'Invalid period format.', liabilities: {}, totalDeposit: 0, periodsIncluded: 0 };
+
         periodsInDepositRange = allPayPeriods.filter(p => {
-            const payDate = new Date(p.payDate);
-            return payDate >= start && payDate <= end;
+            const pDate = new Date(p.payDate);
+            return pDate >= start && pDate <= end;
         });
         reportTitle = `Tax Deposit for ${title}`;
     }
 
-    if (periodsInDepositRange.length === 0) return `<div class="alert alert-info">No payroll data found for the selected period.</div><h4>${reportTitle}</h4>`;
-    
+    if (periodsInDepositRange.length === 0) {
+        return {
+            reportTitle,
+            error: 'No payroll data found for the selected period.',
+            liabilities: {},
+            totalDeposit: 0,
+            periodsIncluded: 0
+        };
+    }
+
     let liabilities = {};
-    const freqs = appData.settings.taxFrequencies;
+    const freqs = appData.settings.taxFrequencies || {};
     const taxMap = {
         'Federal Payroll (941)': { freq: freqs.federal, type: 'federal'},
         'FUTA (940)': { freq: freqs.futa, type: 'futa'},
@@ -694,14 +739,17 @@ export function generateTaxDepositReport() {
     };
 
     for (const [name, data] of Object.entries(taxMap)) {
-        if (data.freq !== selectedFreq) continue;
-        
+        // Match frequency (case-insensitive comparison)
+        const configuredFreq = (data.freq || '').toLowerCase();
+        const requestedFreq = selectedFreq.toLowerCase();
+        if (configuredFreq !== requestedFreq) continue;
+
         let totalLiability = 0;
         let federalBreakdown = { federal: 0, fica: 0, medicare: 0 };
 
         periodsInDepositRange.forEach(p => {
             switch (data.type) {
-                case 'federal': 
+                case 'federal':
                     const fedWH = p.taxes.federal;
                     const ficaTotal = p.taxes.fica * 2; // Employer + Employee
                     const medicareTotal = p.taxes.medicare * 2; // Employer + Employee
@@ -718,13 +766,18 @@ export function generateTaxDepositReport() {
         });
 
         if (totalLiability > 0) {
-             liabilities[name] = { amount: totalLiability, breakdown: data.type === 'federal' ? federalBreakdown : null };
+            liabilities[name] = {
+                amount: totalLiability,
+                breakdown: data.type === 'federal' ? federalBreakdown : null,
+                type: data.type
+            };
         }
     }
 
-    if (Object.keys(liabilities).length === 0) return `<div class="alert alert-info">No tax liabilities due for the selected period.</div><h4>${reportTitle}</h4>`;
+    let totalDeposit = Object.values(liabilities).reduce((sum, l) => sum + l.amount, 0);
 
-    let tableRows = '', totalDeposit = 0;
+    // Generate HTML for display
+    let tableRows = '';
     for (const [name, data] of Object.entries(liabilities)) {
         tableRows += `<tr class="sub-total-row"><td>${name}</td><td>$${data.amount.toFixed(2)}</td></tr>`;
         if (data.breakdown) {
@@ -732,10 +785,45 @@ export function generateTaxDepositReport() {
             tableRows += `<tr><td style="padding-left: 30px;">Social Security (FICA)</td><td>$${data.breakdown.fica.toFixed(2)}</td></tr>`;
             tableRows += `<tr><td style="padding-left: 30px;">Medicare</td><td>$${data.breakdown.medicare.toFixed(2)}</td></tr>`;
         }
-        totalDeposit += data.amount;
     }
 
-    return `<h4>${reportTitle}</h4><table class="report-table"><thead><tr><th>Tax Type</th><th>Amount Due</th></tr></thead><tbody>${tableRows}</tbody><tfoot><tr class="total-row"><td>Total Deposit Due</td><td>$${totalDeposit.toFixed(2)}</td></tr></tfoot></table>`;
+    const html = Object.keys(liabilities).length === 0
+        ? `<div class="alert alert-info">No tax liabilities due for the selected period.</div><h4>${reportTitle}</h4>`
+        : `<h4>${reportTitle}</h4><table class="report-table"><thead><tr><th>Tax Type</th><th>Amount Due</th></tr></thead><tbody>${tableRows}</tbody><tfoot><tr class="total-row"><td>Total Deposit Due</td><td>$${totalDeposit.toFixed(2)}</td></tr></tfoot></table>`;
+
+    return {
+        reportTitle,
+        liabilities,
+        totalDeposit,
+        html,
+        periodsIncluded: periodsInDepositRange.length
+    };
+}
+
+/**
+ * Generates a tax deposit report by reading from DOM (UI wrapper).
+ * Calls the pure function generateTaxDepositReportFromData() internally.
+ */
+export function generateTaxDepositReport() {
+    const selectedFreq = document.getElementById('reportTaxFrequency')?.value;
+    if (!selectedFreq) return `<div class="alert alert-info">Please select a deposit frequency.</div>`;
+
+    let periodInput = null;
+    let payDate = null;
+
+    if (['weekly', 'bi-weekly'].includes(selectedFreq)) {
+        payDate = document.getElementById('reportPayPeriod')?.value;
+    } else {
+        periodInput = document.getElementById('reportPeriodText')?.value;
+    }
+
+    const result = generateTaxDepositReportFromData(selectedFreq, periodInput, payDate);
+
+    if (result.error && result.periodsIncluded === 0) {
+        return `<div class="alert alert-info">${result.error}</div>${result.reportTitle ? `<h4>${result.reportTitle}</h4>` : ''}`;
+    }
+
+    return result.html;
 }
 
 export function generateW2Report(yearStr) {

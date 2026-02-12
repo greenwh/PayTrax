@@ -15,6 +15,77 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Deployed as static files (GitHub Pages compatible)
 - jsPDF library for PDF export functionality (loaded via CDN)
 
+## Model Selection & Complexity Assessment
+
+**Assessment Date:** [2026-01-11]
+**Assessed Model:** Sonnet 4.5
+**Complexity Score:** [6.2/10]
+
+**Dimension Breakdown:**
+- Data Structure: 6.5/10
+- State Management: 7/10
+- Integration: 4.5/10
+- Edge Cases: 5.5/10
+- Reasoning/Algorithms: 7.5/10
+
+**Recommended Model:** [Sonnet]
+
+**Assessment Rationale:**
+  ## Model Recommendation
+
+  **Recommended Model: Sonnet 4.5** (Complexity: 6.2/10)
+
+  PayTrax has moderate complexity with sophisticated tax calculation logic (running remainder algorithm, wage base
+  limiting) and sequential state dependencies requiring careful handling. The well-documented, modular architecture with
+   5,900 lines across 11 ES6 modules is well-suited for Sonnet. Escalate to Opus for architectural overhauls or when
+  adding complex multi-entity features. Haiku acceptable only for UI-only changes and documentation updates.
+
+  **Critical areas requiring careful review**: logic.js (tax calculations, sequential recalculation), state management
+  (cascading updates), and data migrations (backward compatibility).
+
+  ---
+  SUMMARY
+
+  PayTrax is a solid medium-complexity project that fits Sonnet's capabilities well. The running remainder algorithm and
+   sequential dependency requirements elevate it above simple CRUD, but the clean modular architecture and excellent
+  documentation keep it below Opus territory.
+
+  Primary concern: Lack of automated tests means every change carries regression risk, especially in tax calculations
+  where errors have real-world financial consequences. Consider this when evaluating AI-suggested changes to logic.js.
+
+
+**Key Monitoring Points:**
+  1. Running Remainder Algorithm (CRITICAL)
+    - File: logic.js:193-199
+    - Risk: Breaking this creates accumulating rounding errors
+    - Test: Calculate 26 bi-weekly periods, verify taxes match manual calculation
+    - Verify: taxRemainders object persists correctly between periods
+  2. Sequential Recalculation (CRITICAL)
+    - File: logic.js:calculatePay(), recalculateAllPeriodsForEmployee()
+    - Risk: Editing Period 1 might not trigger recalc of Periods 2-26
+    - Test: Edit Period 1 hours, verify Period 26 tax amounts change
+    - Verify: Console shows "Recalculating all periods from Period 1" message
+  3. Data Migration (HIGH)
+    - File: migration.js
+    - Risk: Breaking backward compatibility with older data versions
+    - Test: Load v1-v6 test data files, verify migrations apply correctly
+    - Verify: appData.version updates to 7 after load
+  4. Bank Register Synchronization (MEDIUM)
+    - File: banking.js, logic.js
+    - Risk: Pay period changes might not update bank register transactions
+    - Test: Calculate pay, verify bank register shows debit; edit hours, verify amount updates
+    - Verify: autoSubtraction setting controls behavior
+  5. Tax Wage Base Limiting (HIGH)
+    - File: logic.js:756-759 (Social Security), 947-950 (FUTA)
+    - Risk: Incorrect YTD tracking could over-withhold Social Security
+    - Test: Employee earning >$168,600/year should stop SS withholding mid-year
+    - Verify: Form 941 line 5a matches expected wage base
+  6. State Persistence (MEDIUM)
+    - File: state.js, db.js
+    - Risk: Data loss if IndexedDB and localStorage both fail
+    - Test: Disable IndexedDB, verify localStorage fallback works
+    - Verify: Browser DevTools shows data in both storage locations
+
 ## Getting Started - Development Setup
 
 ### Start Development Server
@@ -32,14 +103,41 @@ python -m http.server 8000
 
 **Why Python HTTP Server?** ES6 modules require CORS compliance and cannot run via `file://` protocol directly.
 
-### No Build, Lint, or Test Commands
+### Automated Testing (NEW)
+
+**Test Framework:** Vitest with browser mode (Playwright)
+**Coverage Provider:** Istanbul (works with browser mode)
+**Test Files:** 114 tests across utils, validation, db, and migration modules
+
+**Running Tests:**
+```bash
+npm test                 # Run all tests
+npm run test:watch       # Run tests in watch mode
+npm run test:ui          # Open Vitest UI dashboard
+npm run test:coverage    # Run tests with coverage report
+npm run test:unit        # Run unit tests only
+npm run test:integration # Run integration tests only
+```
+
+**Current Coverage:**
+- utils.js: 100% ✅
+- validation.js: 88% ✅
+- migration.js: 98% ✅
+- db.js: 77% ✅
+- logic.js: Limited (needs integration tests)
+
+**Important Notes:**
+- Tests run in real browser environment (IndexedDB, DOM APIs work)
+- Test fixtures available in `tests/fixtures/`
+- Integration tests for logic.js require refactoring to reduce DOM coupling
+- Manual testing still recommended for UI interactions
+
+### No Build or Lint Commands
 
 - ✓ No build system (webpack, Vite, etc.)
-- ✓ No package.json or npm dependencies
 - ✓ No TypeScript or transpilation
 - ✓ No linting or formatting tools
-- ✓ No test framework
-- Manual testing via browser console
+- Testing via Vitest (see above)
 
 ## Architecture Overview
 
@@ -188,7 +286,49 @@ Old backups are automatically migrated when imported. The migration flow in `mig
 
 ## Testing Strategy
 
-Since there's no automated test framework, testing is manual:
+### Automated Testing
+
+PayTrax now has comprehensive automated testing with Vitest. Run tests before and after making changes to ensure nothing breaks.
+
+**Quick Start:**
+```bash
+npm test              # Run all tests (114 tests pass)
+npm run test:coverage # Check coverage and identify gaps
+```
+
+**Test Organization:**
+- `tests/unit/` - Unit tests for individual modules (utils, validation, db, migration)
+- `tests/integration/` - Integration tests for cross-module functionality (logic.js)
+- `tests/fixtures/` - Test data factories and sample data (v1, v6 JSON)
+- `tests/setup.js` - Global test setup (IndexedDB cleanup)
+
+**What's Tested:**
+- ✅ utils.js - Date formatting, parsing (100% coverage)
+- ✅ validation.js - All validation functions (88% coverage)
+- ✅ migration.js - All 7 data migrations (98% coverage)
+- ✅ db.js - IndexedDB operations (77% coverage)
+- ⚠️ logic.js - Limited (needs DOM decoupling for better testability)
+- ❌ ui.js - Not tested (requires E2E testing)
+- ❌ main.js - Not tested (entry point, event orchestration)
+
+**Adding New Tests:**
+
+See `tests/integration/running-remainder.test.js` for an example integration test template. Key patterns:
+- Use `beforeEach()` to reset `appData` state
+- Use test fixtures (`createTestEmployee`, `createTestSettings`) for consistent data
+- Test critical business logic isolated from UI
+- Verify state changes, not DOM mutations
+
+**Limitations:**
+
+logic.js has tight coupling to DOM elements (e.g., `document.getElementById()` calls), making it difficult to test without refactoring. Consider:
+1. Extracting pure calculation functions
+2. Passing data as parameters instead of reading from DOM
+3. Separating business logic from UI updates
+
+### Manual Testing
+
+For UI interactions and visual verification:
 - Open DevTools → Console for debugging
 - Use `console.log(appData)` to inspect state
 - Test in both desktop and mobile browsers

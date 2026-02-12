@@ -1,10 +1,1 @@
-Deductions
-Data Validation and Error Checking
-Turn docs into help
-Limit the size of data entry windows.
-Add export to csv to tabular type data
-Export to pdf for paystub and reports
-Data Encryption
-Make 941 and 940 reports more general
-Make Report Tax Constants a setting
-
+FICA, FUTA ($7K), and SUTA ($25K for 2026) wage cap handling means configurable FUTA/SUTS Caps

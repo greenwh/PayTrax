@@ -1,0 +1,137 @@
+{
+  "version": 6,
+  "settings": {
+    "companyName": "Test Company v6",
+    "taxYear": 2024,
+    "payFrequency": "Bi-weekly",
+    "firstPayPeriodStartDate": "2024-01-01",
+    "daysUntilPayday": 5,
+    "companyAddress": "123 Test St",
+    "companyPhone": "(555) 123-4567",
+    "socialSecurity": 6.2,
+    "medicare": 1.45,
+    "sutaRate": 2.7,
+    "futaRate": 0.6,
+    "employeeIdPrefix": "emp_",
+    "ptoCarryOverLimit": 40,
+    "ssWageBase": 168600,
+    "futaWageBase": 7000,
+    "additionalMedicareThreshold": 200000,
+    "additionalMedicareRate": 0.9,
+    "taxFrequencies": {
+      "federal": "Quarterly",
+      "futa": "Quarterly",
+      "suta": "Quarterly",
+      "state": "Quarterly",
+      "local": "Quarterly"
+    }
+  },
+  "employees": [
+    {
+      "id": "emp-v6-001",
+      "name": "Jane Smith",
+      "idNumber": "987-65-4321",
+      "address": "789 Worker Blvd",
+      "rate": 25,
+      "overtimeMultiplier": 1.5,
+      "holidayMultiplier": 2.0,
+      "fedTaxRate": 12,
+      "stateTaxRate": 5,
+      "localTaxRate": 2,
+      "ptoAccrualRate": 0.0385,
+      "ptoBalance": 10,
+      "taxRemainders": {
+        "federal": 0,
+        "fica": 0,
+        "medicare": 0,
+        "state": 0,
+        "local": 0,
+        "suta": 0,
+        "futa": 0
+      },
+      "deductions": [
+        {
+          "id": "ded-001",
+          "name": "401(k)",
+          "amount": 100,
+          "type": "fixed",
+          "createdDate": "2000-01-01"
+        },
+        {
+          "id": "ded-002",
+          "name": "Health Insurance",
+          "amount": 5,
+          "type": "percent",
+          "createdDate": "2000-01-01"
+        }
+      ]
+    }
+  ],
+  "payPeriods": {
+    "emp-v6-001": [
+      {
+        "period": 1,
+        "startDate": "2024-01-01",
+        "endDate": "2024-01-14",
+        "payDate": "2024-01-19",
+        "hours": {
+          "regular": 80,
+          "overtime": 0,
+          "pto": 0,
+          "holiday": 0
+        },
+        "earnings": {
+          "regular": 2000,
+          "overtime": 0,
+          "pto": 0,
+          "holiday": 0
+        },
+        "grossPay": 2000,
+        "taxes": {
+          "federal": 240,
+          "fica": 124,
+          "medicare": 29,
+          "state": 100,
+          "local": 40,
+          "suta": 54,
+          "futa": 12,
+          "total": 599,
+          "unrounded": {
+            "federal": 240,
+            "fica": 124,
+            "medicare": 29,
+            "state": 100,
+            "local": 40,
+            "suta": 54,
+            "futa": 12
+          }
+        },
+        "deductions": [
+          {
+            "id": "ded-001",
+            "name": "401(k)",
+            "amount": 100
+          },
+          {
+            "id": "ded-002",
+            "name": "Health Insurance",
+            "amount": 100
+          }
+        ],
+        "totalDeductions": 200,
+        "netPay": 1201,
+        "ptoAccrued": 3.08
+      }
+    ]
+  },
+  "bankRegister": [
+    {
+      "id": "txn-v6-001",
+      "date": "2024-01-19",
+      "description": "Payroll - Jane Smith - Period 1",
+      "debit": 1201,
+      "credit": 0,
+      "reconciled": false
+    }
+  ]
+}

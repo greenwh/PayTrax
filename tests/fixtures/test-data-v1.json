@@ -1,0 +1,91 @@
+{
+  "settings": {
+    "companyName": "Test Company v1",
+    "taxYear": 2024,
+    "payFrequency": "Bi-weekly",
+    "firstPayPeriodStartDate": "2024-01-01",
+    "daysUntilPayday": 5,
+    "companyAddress": "123 Test St",
+    "companyPhone": "(555) 123-4567",
+    "socialSecurity": 6.2,
+    "medicare": 1.45,
+    "sutaRate": 2.7,
+    "futaRate": 0.6,
+    "taxFrequencies": {
+      "federal": "Quarterly",
+      "futa": "Quarterly",
+      "suta": "Quarterly",
+      "state": "Quarterly",
+      "local": "Quarterly"
+    }
+  },
+  "employees": [
+    {
+      "id": "emp-v1-001",
+      "name": "John Doe",
+      "idNumber": "123-45-6789",
+      "address": "456 Employee Ave",
+      "rate": 20,
+      "overtimeMultiplier": 1.5,
+      "holidayMultiplier": 2.0,
+      "fedTaxRate": 12,
+      "stateTaxRate": 5,
+      "localTaxRate": 2,
+      "ptoAccrualRate": 0.0385,
+      "ptoBalance": 0
+    }
+  ],
+  "payPeriods": {
+    "emp-v1-001": [
+      {
+        "period": 1,
+        "startDate": "2024-01-01",
+        "endDate": "2024-01-14",
+        "payDate": "2024-01-19",
+        "hours": {
+          "regular": 80,
+          "overtime": 0,
+          "pto": 0,
+          "holiday": 0
+        },
+        "earnings": {
+          "regular": 1600,
+          "overtime": 0,
+          "pto": 0,
+          "holiday": 0
+        },
+        "grossPay": 1600,
+        "taxes": {
+          "federal": 192,
+          "fica": 99.2,
+          "medicare": 23.2,
+          "state": 80,
+          "local": 32,
+          "suta": 43.2,
+          "futa": 9.6,
+          "total": 479.2,
+          "unrounded": {
+            "federal": 192,
+            "fica": 99.2,
+            "medicare": 23.2,
+            "state": 80,
+            "local": 32,
+            "suta": 43.2,
+            "futa": 9.6
+          }
+        },
+        "netPay": 1120.8,
+        "ptoAccrued": 3.08
+      }
+    ]
+  },
+  "bankRegister": [
+    {
+      "id": "txn-v1-001",
+      "date": "2024-01-19",
+      "description": "Payroll - John Doe - Period 1",
+      "debit": 1120.8,
+      "credit": 0
+    }
+  ]
+}
