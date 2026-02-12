@@ -107,7 +107,7 @@ python -m http.server 8000
 
 **Test Framework:** Vitest with browser mode (Playwright)
 **Coverage Provider:** Istanbul (works with browser mode)
-**Test Files:** 114 tests across utils, validation, db, and migration modules
+**Test Files:** 285 tests across utils, validation, db, migration, and integration modules
 
 **Running Tests:**
 ```bash
@@ -124,7 +124,7 @@ npm run test:integration # Run integration tests only
 - validation.js: 88% ✅
 - migration.js: 98% ✅
 - db.js: 77% ✅
-- logic.js: Limited (needs integration tests)
+- logic.js: Good coverage via integration tests (payroll calcs, wage caps, tax deposits, reports)
 
 **Important Notes:**
 - Tests run in real browser environment (IndexedDB, DOM APIs work)
@@ -170,11 +170,12 @@ js/validation.js  → Comprehensive data validation module (NEW in v5)
 **Data Structure:**
 ```javascript
 appData = {
-  version: 5,  // Updated from 4 to 5
+  version: 8,  // Updated from 7 to 8
   settings: {
     companyName, taxYear, payFrequency, firstPayPeriodStartDate,
     socialSecurity, medicare, sutaRate, futaRate,
-    ssWageBase, futaWageBase, additionalMedicareThreshold, additionalMedicareRate,  // NEW in v5
+    ssWageBase, futaWageBase, sutaWageBase,  // NEW sutaWageBase in v8
+    additionalMedicareThreshold, additionalMedicareRate,  // NEW in v5
     taxFrequencies: { federal, futa, suta, state, local },
     ...
   },
@@ -229,13 +230,13 @@ Single module import triggers entire app initialization. Service Worker is regis
 | Bank Register | `banking.js` | `addTransaction()`, `reconcileTransaction()`, `filterTransactions()`, CSV export |
 | Import/Export | `data-io.js` | `importData()`, `exportData()` (with version checking) |
 | **Data Validation** | `validation.js` | `validateEmployee()`, `validateHours()`, `validateSettings()`, `validateTransaction()`, `validateDeduction()` **NEW v5** |
-| Backward Compatibility | `migration.js` | Handles v1→v5 data migration sequentially |
+| Backward Compatibility | `migration.js` | Handles v1→v8 data migration sequentially |
 
 ## Data Versioning & Migration
 
-**Current Version:** 5
+**Current Version:** 8
 
-Old backups are automatically migrated when imported. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v5 transformations are applied.
+Old backups are automatically migrated when imported. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v8 transformations are applied.
 
 **Version History:**
 - v1 → Initial structure
@@ -243,6 +244,9 @@ Old backups are automatically migrated when imported. The migration flow in `mig
 - v3 → Added taxRemainders per employee (fractional cent tracking)
 - v4 → Added reconciled status for bank transactions
 - v5 → Added employee deductions, configurable tax settings (ssWageBase, futaWageBase, additionalMedicareThreshold, additionalMedicareRate), comprehensive validation module
+- v6 → Added createdDate to deductions for retroactive filtering
+- v7 → Added autoSubtraction setting for bank register toggle
+- v8 → Added sutaWageBase setting ($25,000 OK default), wage base cap enforcement at calculation time
 
 ## PWA & Offline Support
 
@@ -292,7 +296,7 @@ PayTrax now has comprehensive automated testing with Vitest. Run tests before an
 
 **Quick Start:**
 ```bash
-npm test              # Run all tests (114 tests pass)
+npm test              # Run all tests (285 tests pass)
 npm run test:coverage # Check coverage and identify gaps
 ```
 
@@ -305,9 +309,9 @@ npm run test:coverage # Check coverage and identify gaps
 **What's Tested:**
 - ✅ utils.js - Date formatting, parsing (100% coverage)
 - ✅ validation.js - All validation functions (88% coverage)
-- ✅ migration.js - All 7 data migrations (98% coverage)
+- ✅ migration.js - All 8 data migrations (98% coverage)
 - ✅ db.js - IndexedDB operations (77% coverage)
-- ⚠️ logic.js - Limited (needs DOM decoupling for better testability)
+- ✅ logic.js - Payroll calcs, wage base caps, tax deposits, reports, deductions, sequential recalc
 - ❌ ui.js - Not tested (requires E2E testing)
 - ❌ main.js - Not tested (entry point, event orchestration)
 
