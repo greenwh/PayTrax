@@ -1,0 +1,43 @@
+• Findings
+
+  - High – Payroll tax withholding is implemented as a set of flat percentages entered per employee (fedTaxRate,
+    stateTaxRate, localTaxRate) and applied directly to gross wages (PayTrax/js/logic.js:203-215, PayTrax/js/
+    logic.js:505-517). There is no concept of IRS Publication 15‑T tables, filing status, allowances, supplemental
+    wage rules, pre‑tax deductions, or state-specific brackets. In a professional system this produces materially wrong
+    net pay and remittance amounts for every employee unless the user guesses the exact effective percentage for each
+    period, which is not compliant or auditable.
+  - High – The system defines Social Security, Medicare, FUTA wage bases and Additional Medicare thresholds (PayTrax/
+    js/state.js:34-41, PayTrax/js/logic.js:9), but the actual payroll calculation never consults them (PayTrax/js/
+    logic.js:203-209). As a result FICA, FUTA, SUTA and Additional Medicare continue to be calculated on every dollar
+    earned, even after employees exceed the statutory caps. Reports such as the 941 attempt to cap wages retrospectively
+    (PayTrax/js/logic.js:869-959), so the deposit reports/W‑2 summaries will never tie to the amounts actually withheld
+    or posted to the bank register. This creates guaranteed mismatches with IRS/state filings and will over‑withhold
+    from employees once they pass the caps.
+  - High – Running payroll automatically books a single bank-register debit equal to gross pay plus all tax amounts
+    (PayTrax/js/logic.js:245-255). That treats employee withholdings and employer taxes as if they left cash
+    immediately with the paycheck, rather than remaining in liability accounts until deposits are made, and it never
+    creates separate transactions when the tax payments actually occur. A professional ledger should record net-pay
+    disbursements and track tax liabilities/deposits separately; the current approach double-counts the cash outflow and
+    makes reconciliation against actual bank activity impossible.
+  - High – All payroll data (employee PII, pay history, bank register, tax settings) is persisted directly in browser
+    IndexedDB/localStorage with no encryption, access control, backup, or multi-user authentication (PayTrax/js/
+    state.js:63-147). For a payroll system this violates basic security/compliance expectations (SOC 2, HIPAA, state
+    privacy laws) and makes it trivial for anyone with browser access to exfiltrate or tamper with payroll records.
+    A production-grade solution needs a secured server-side store with encryption at rest, authentication, and audit
+    logging.
+  - Medium – The employee data model only captures name, address, and flat rates (PayTrax/js/logic.js:505-517). There
+    is no place to store legally required identifiers (SSN/EIN), work locations, filing statuses, benefit elections,
+    garnishments, or residency data, so the system cannot generate valid W‑2s/1099s, state unemployment filings, or
+    multi-jurisdiction taxes. This also prevents supporting routine small-business scenarios like multi-state employees,
+    pre-tax benefits, or court-ordered deductions.
+
+  Open Questions / Assumptions
+
+  - Are there plans to capture W‑4/W‑2 data (filing status, dependents, SSN) and jurisdictional information needed for
+    compliance, or is the goal intentionally limited to “toy” calculations?
+  - How are tax deposits actually executed? If external systems handle payments, what data exchange is expected so that
+    liabilities and deposits can be reconciled accurately?
+
+  Change Summary
+
+  - No code changes were made; this was a code-quality and compliance review.
