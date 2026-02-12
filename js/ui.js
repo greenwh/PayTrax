@@ -48,6 +48,7 @@ export function displaySettings() {
     document.getElementById('futaRate').value = settings.futaRate;
     document.getElementById('ssWageBase').value = settings.ssWageBase;
     document.getElementById('futaWageBase').value = settings.futaWageBase;
+    document.getElementById('sutaWageBase').value = settings.sutaWageBase;
     document.getElementById('additionalMedicareThreshold').value = settings.additionalMedicareThreshold;
     document.getElementById('additionalMedicareRate').value = settings.additionalMedicareRate;
     document.getElementById('federalTaxFrequency').value = settings.taxFrequencies.federal;

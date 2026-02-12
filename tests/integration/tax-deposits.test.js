@@ -237,9 +237,9 @@ describe('Tax Deposit Reports - Quarterly Frequency', () => {
 
     const report = generateTaxDepositReportFromData('quarterly', 'Q1 2024');
 
-    // FUTA: $12 per period * 6 = $72
+    // FUTA with $7,000 wage base cap: P1-3=$12 each, P4=$6 (partial), P5-6=$0
     expect(report.liabilities['FUTA (940)']).toBeDefined();
-    expect(report.liabilities['FUTA (940)'].amount).toBe(72);
+    expect(report.liabilities['FUTA (940)'].amount).toBe(42);
   });
 
   it('should calculate quarterly SUTA deposit correctly', () => {

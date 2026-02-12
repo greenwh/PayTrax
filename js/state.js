@@ -11,11 +11,12 @@ import * as db from './db.js';
 
 // --- CONFIGURATION & DEFAULT STATE ---
 
-export const CURRENT_VERSION = 7; // Incremented from 6 to 7
+export const CURRENT_VERSION = 8; // Incremented from 7 to 8
 
 // Constants for tax calculations (now also in settings for configurability)
 export const SS_WAGE_BASE = 168600;
 export const FUTA_WAGE_BASE = 7000;
+export const SUTA_WAGE_BASE = 25000;
 let dbInitialized = false;
 
 // Default structure for the application data
@@ -35,6 +36,7 @@ export const defaultAppData = {
         futaRate: 0.6,
         ssWageBase: 168600,
         futaWageBase: 7000,
+        sutaWageBase: 25000,
         additionalMedicareThreshold: 200000,
         additionalMedicareRate: 0.9,
         taxFrequencies: {
@@ -134,6 +136,9 @@ export async function loadData() {
         }
         if (appData.settings.futaWageBase === undefined) {
             appData.settings.futaWageBase = defaultAppData.settings.futaWageBase;
+        }
+        if (appData.settings.sutaWageBase === undefined) {
+            appData.settings.sutaWageBase = defaultAppData.settings.sutaWageBase;
         }
         if (appData.settings.additionalMedicareThreshold === undefined) {
             appData.settings.additionalMedicareThreshold = defaultAppData.settings.additionalMedicareThreshold;

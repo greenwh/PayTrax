@@ -26,6 +26,7 @@ export function createTestSettings(overrides = {}) {
     // Wage bases and thresholds
     ssWageBase: 168600,
     futaWageBase: 7000,
+    sutaWageBase: 25000,
     additionalMedicareThreshold: 200000,
     additionalMedicareRate: 0.9,
 
@@ -92,7 +93,7 @@ export function createMonthlySettings(overrides = {}) {
  */
 export function createTestAppData(settingsOverrides = {}, employees = []) {
   return {
-    version: 7,
+    version: 8,
     settings: createTestSettings(settingsOverrides),
     employees: employees,
     payPeriods: {},

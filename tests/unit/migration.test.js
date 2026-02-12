@@ -5,15 +5,15 @@ import testDataV6 from '../fixtures/test-data-v6.json';
 
 describe('migration.js', () => {
   describe('migrateData() - Full Migration Chain', () => {
-    it('should migrate v1 data to v7', () => {
+    it('should migrate v1 data to v8', () => {
       // Create a deep copy to avoid mutating the fixture
       const v1Data = JSON.parse(JSON.stringify(testDataV1));
 
       // Migrate from v1 to v7
       const migrated = migrateData(v1Data);
 
-      // Should be at v7
-      expect(migrated.version).toBe(7);
+      // Should be at v8
+      expect(migrated.version).toBe(8);
 
       // v2 additions
       expect(migrated.settings.employeeIdPrefix).toBeDefined();
@@ -41,21 +41,21 @@ describe('migration.js', () => {
       expect(migrated.settings.additionalMedicareThreshold).toBe(200000);
       expect(migrated.settings.additionalMedicareRate).toBe(0.9);
 
-      // v6 additions - deduction createdDate (should be old date for existing deductions)
-      // v1 data has no deductions, so this is tested with v5/v6 data below
-
       // v7 additions - autoSubtraction
       expect(migrated.settings.autoSubtraction).toBe(true);
+
+      // v8 additions - sutaWageBase
+      expect(migrated.settings.sutaWageBase).toBe(25000);
     });
 
-    it('should migrate v6 data to v7', () => {
+    it('should migrate v6 data to v8', () => {
       const v6Data = JSON.parse(JSON.stringify(testDataV6));
 
-      // Migrate from v6 to v7
+      // Migrate from v6 to v8
       const migrated = migrateData(v6Data);
 
-      // Should be at v7
-      expect(migrated.version).toBe(7);
+      // Should be at v8
+      expect(migrated.version).toBe(8);
 
       // v7 additions - autoSubtraction
       expect(migrated.settings.autoSubtraction).toBe(true);
@@ -66,7 +66,7 @@ describe('migration.js', () => {
       expect(migrated.employees[0].deductions[1].createdDate).toBe('2000-01-01');
     });
 
-    it('should not modify data already at v7', () => {
+    it('should migrate v7 data to v8 adding sutaWageBase', () => {
       const v7Data = {
         version: 7,
         settings: { companyName: 'Test', autoSubtraction: false },
@@ -77,8 +77,24 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v7Data)));
 
-      expect(migrated.version).toBe(7);
+      expect(migrated.version).toBe(8);
       expect(migrated.settings.autoSubtraction).toBe(false); // Should not be changed
+      expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
+    });
+
+    it('should not modify data already at v8', () => {
+      const v8Data = {
+        version: 8,
+        settings: { companyName: 'Test', autoSubtraction: false, sutaWageBase: 30000 },
+        employees: [],
+        payPeriods: {},
+        bankRegister: []
+      };
+
+      const migrated = migrateData(JSON.parse(JSON.stringify(v8Data)));
+
+      expect(migrated.version).toBe(8);
+      expect(migrated.settings.sutaWageBase).toBe(30000); // Should not be changed
     });
   });
 
@@ -393,9 +409,10 @@ describe('migration.js', () => {
 
       const migrated = migrateData(unversionedData);
 
-      expect(migrated.version).toBe(7);
+      expect(migrated.version).toBe(8);
       expect(migrated.settings.employeeIdPrefix).toBeDefined(); // v2 addition
       expect(migrated.settings.autoSubtraction).toBeDefined(); // v7 addition
+      expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
     });
 
     it('should handle empty employees array', () => {
@@ -410,7 +427,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v1Data);
 
       expect(migrated.employees).toEqual([]);
-      expect(migrated.version).toBe(7);
+      expect(migrated.version).toBe(8);
     });
 
     it('should handle empty bank register', () => {
@@ -425,7 +442,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v3Data);
 
       expect(migrated.bankRegister).toEqual([]);
-      expect(migrated.version).toBe(7);
+      expect(migrated.version).toBe(8);
     });
 
     it('should preserve all existing data during migration', () => {

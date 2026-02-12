@@ -6,7 +6,7 @@
   This file is original work based on documentation and prompts by greenwh.
   Licensed under the MIT License.
 */
-import { appData, SS_WAGE_BASE, FUTA_WAGE_BASE } from './state.js';
+import { appData, SS_WAGE_BASE, FUTA_WAGE_BASE, SUTA_WAGE_BASE } from './state.js';
 import { formatDate, parseDateInput } from './utils.js';
 import { addTransaction } from './banking.js'; // Import from new banking module
 
@@ -186,6 +186,36 @@ export function recalculatePeriod(employeeId, periodNum) {
     const grossPay = Object.values(earnings).reduce((sum, val) => sum + val, 0);
     const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
 
+    // Compute YTD gross wages BEFORE this period for wage base cap enforcement
+    const year = new Date(period.payDate).getFullYear();
+    const allPeriodsForEmployee = appData.payPeriods[employeeId] || [];
+    let ytdGrossBeforeThisPeriod = 0;
+
+    allPeriodsForEmployee.forEach(p => {
+        if (p.period < period.period
+            && new Date(p.payDate).getFullYear() === year
+            && p.grossPay > 0) {
+            ytdGrossBeforeThisPeriod += p.grossPay;
+        }
+    });
+
+    // Retrieve wage base settings
+    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
+    const sutaWageBase = appData.settings.sutaWageBase || SUTA_WAGE_BASE;
+
+    // Calculate taxable wages for each capped tax type
+    // If YTD already exceeds the cap, taxable wages for this period = 0
+    // If this period's gross crosses the cap, only the portion below the cap is taxable
+    function getTaxableWages(ytdBefore, currentGross, wageBase) {
+        if (ytdBefore >= wageBase) return 0;
+        return Math.min(currentGross, wageBase - ytdBefore);
+    }
+
+    const ssTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, ssWageBase);
+    const futaTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, futaWageBase);
+    const sutaTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, sutaWageBase);
+
     // Running Remainder Calculation Logic
     const unrounded = {};
     const rounded = {};
@@ -200,13 +230,13 @@ export function recalculatePeriod(employeeId, periodNum) {
         newRemainders[taxName] = totalToConsider - rounded[taxName];
     };
 
-    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));
-    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));
-    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));
-    calculateTaxWithRemainder('fica', grossPay * (socialSecurity / 100));
-    calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));
-    calculateTaxWithRemainder('suta', grossPay * (sutaRate / 100));
-    calculateTaxWithRemainder('futa', grossPay * (futaRate / 100));
+    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));         // NO cap
+    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));          // NO cap
+    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));          // NO cap
+    calculateTaxWithRemainder('fica', ssTaxableWages * (socialSecurity / 100));            // CAPPED by SS wage base
+    calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));                    // NO cap
+    calculateTaxWithRemainder('suta', sutaTaxableWages * (sutaRate / 100));                // CAPPED by SUTA wage base
+    calculateTaxWithRemainder('futa', futaTaxableWages * (futaRate / 100));                // CAPPED by FUTA wage base
 
     // Update the employee's stored remainders for the next pay run
     appData.employees[employeeIndex].taxRemainders = newRemainders;
@@ -393,13 +423,38 @@ function recalculateSinglePeriodFromUI(employeeId, periodNum) {
     const grossPay = Object.values(earnings).reduce((sum, val) => sum + val, 0);
     const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
 
-    // --- NEW: Running Remainder Calculation Logic ---
+    // Compute YTD gross wages BEFORE this period for wage base cap enforcement
+    const year = new Date(period.payDate).getFullYear();
+    const allPeriodsForEmployee = appData.payPeriods[employeeId] || [];
+    let ytdGrossBeforeThisPeriod = 0;
+
+    allPeriodsForEmployee.forEach(p => {
+        if (p.period < period.period
+            && new Date(p.payDate).getFullYear() === year
+            && p.grossPay > 0) {
+            ytdGrossBeforeThisPeriod += p.grossPay;
+        }
+    });
+
+    // Retrieve wage base settings
+    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
+    const sutaWageBase = appData.settings.sutaWageBase || SUTA_WAGE_BASE;
+
+    function getTaxableWages(ytdBefore, currentGross, wageBase) {
+        if (ytdBefore >= wageBase) return 0;
+        return Math.min(currentGross, wageBase - ytdBefore);
+    }
+
+    const ssTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, ssWageBase);
+    const futaTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, futaWageBase);
+    const sutaTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, sutaWageBase);
+
+    // --- Running Remainder Calculation Logic ---
     const unrounded = {};
     const rounded = {};
     const newRemainders = {};
 
-    // Helper function to process each tax by carrying forward the remainder from the previous payroll
-    // Uses proper currency rounding (round half up) instead of JavaScript's banker's rounding
     const calculateTaxWithRemainder = (taxName, calculation) => {
         const previousRemainder = employee.taxRemainders[taxName] || 0;
         unrounded[taxName] = calculation;
@@ -409,13 +464,13 @@ function recalculateSinglePeriodFromUI(employeeId, periodNum) {
         newRemainders[taxName] = totalToConsider - rounded[taxName];
     };
 
-    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));
-    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));
-    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));
-    calculateTaxWithRemainder('fica', grossPay * (socialSecurity / 100));
-    calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));
-    calculateTaxWithRemainder('suta', grossPay * (sutaRate / 100));
-    calculateTaxWithRemainder('futa', grossPay * (futaRate / 100));
+    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));         // NO cap
+    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));          // NO cap
+    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));          // NO cap
+    calculateTaxWithRemainder('fica', ssTaxableWages * (socialSecurity / 100));            // CAPPED by SS wage base
+    calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));                    // NO cap
+    calculateTaxWithRemainder('suta', sutaTaxableWages * (sutaRate / 100));                // CAPPED by SUTA wage base
+    calculateTaxWithRemainder('futa', futaTaxableWages * (futaRate / 100));                // CAPPED by FUTA wage base
 
     // Update the employee's stored remainders for the next pay run
     appData.employees[employeeIndex].taxRemainders = newRemainders;
@@ -676,6 +731,7 @@ export function updateSettingsFromUI() {
     appData.settings.futaRate = parseFloat(document.getElementById('futaRate').value);
     appData.settings.ssWageBase = parseFloat(document.getElementById('ssWageBase').value);
     appData.settings.futaWageBase = parseFloat(document.getElementById('futaWageBase').value);
+    appData.settings.sutaWageBase = parseFloat(document.getElementById('sutaWageBase').value);
     appData.settings.additionalMedicareThreshold = parseFloat(document.getElementById('additionalMedicareThreshold').value);
     appData.settings.additionalMedicareRate = parseFloat(document.getElementById('additionalMedicareRate').value);
     appData.settings.taxFrequencies.federal = document.getElementById('federalTaxFrequency').value;

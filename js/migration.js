@@ -144,6 +144,21 @@ function migrateToV7(data) {
 }
 
 /**
+ * Migrates from version 7 to version 8.
+ * - Adds sutaWageBase setting (Oklahoma SUTA taxable wage base, default $25,000)
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV8(data) {
+    console.log("Running migration to v8...");
+
+    if (data.settings && data.settings.sutaWageBase === undefined) {
+        data.settings.sutaWageBase = 25000;
+    }
+
+    data.version = 8; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -171,12 +186,11 @@ export function migrateData(data) {
             // Fall-through is intentional
         case 6:
             migrateToV7(data);
+            // Fall-through is intentional
+        case 7:
+            migrateToV8(data);
             // Fall-through is intentional for future migrations
             break;
-        // case 7:
-        //     migrateToV8(data); // Add future migrations here
-        //     break;
-        // ...and so on.
     }
 
     // Final check to ensure it's at the current version
