@@ -14,7 +14,7 @@ import * as db from './db.js';
 export const CURRENT_VERSION = 8; // Incremented from 7 to 8
 
 // Constants for tax calculations (now also in settings for configurability)
-export const SS_WAGE_BASE = 168600;
+export const SS_WAGE_BASE = 184500;
 export const FUTA_WAGE_BASE = 7000;
 export const SUTA_WAGE_BASE = 25000;
 let dbInitialized = false;
@@ -34,7 +34,7 @@ export const defaultAppData = {
         medicare: 1.45,
         sutaRate: 2.7,
         futaRate: 0.6,
-        ssWageBase: 168600,
+        ssWageBase: 184500,
         futaWageBase: 7000,
         sutaWageBase: 25000,
         additionalMedicareThreshold: 200000,

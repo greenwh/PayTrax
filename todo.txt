@@ -1,1 +1,1 @@
-FICA, FUTA ($7K), and SUTA ($25K for 2026) wage cap handling means configurable FUTA/SUTS Caps
+have claude code examine dead function in recalculateSinglePeriodFromUI() in logic.js?
