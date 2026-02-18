@@ -11,42 +11,54 @@ This application was developed by `greenwh` with substantial AI assistance to de
 ## Key Features
 
 -   **Dynamic Payroll Dashboard:**
-    Enter hours for employees and see gross pay, net pay, and total payroll costs calculated in real-time.
+    Enter hours for employees and see gross pay, net pay, and total payroll costs calculated in real-time. Includes bank fund projections for upcoming payroll costs.
 -   **Comprehensive Settings:**
-    Configure company details, pay frequencies, tax rates, and employee information all in one place.
+    Configure company details, pay frequencies, tax rates, configurable wage bases/thresholds, and tax deposit frequencies all in one place.
 -   **Employee Management:**
-    Easily add, edit, and manage your employees, including their pay rates, tax withholding, and PTO balances.
+    Easily add, edit, and manage your employees, including their pay rates, overtime/holiday multipliers, tax withholding, and PTO balances.
+-   **Employee Deductions:**
+    Configure recurring pre-tax deductions (401k, health insurance, union dues, etc.) as fixed dollar amounts or percentages of gross pay. Deductions are date-aware and only apply to pay periods on or after their creation date.
+-   **Running Remainder Tax Algorithm:**
+    Fractional cents from tax rounding carry forward between pay periods, ensuring penny-perfect accuracy across the full year.
 -   **Pay Stub Generation:**
-    Create professional, detailed, and printable pay stubs for any employee and any pay period.
+    Create professional, detailed, and printable pay stubs for any employee and any pay period, with PDF export capability.
 -   **Compliance Reporting:**
     Generate the data you need for key tax forms, including:
-    -   Tax Deposit Schedules
+    -   Tax Deposit Schedules (configurable frequency)
     -   Annual W-2 Data
-    -   Quarterly IRS Form 941 Data
-    -   Annual IRS Form 940 Data
-    -   Custom date-range reports for wages and employer expenses.
+    -   Quarterly IRS Form 941 Data (with monthly liability breakdown)
+    -   Annual IRS Form 940 Data (with quarterly liability breakdown)
+    -   Custom date-range reports for wages and employer expenses
+    -   **CSV export** for all report types
 -   **Advanced Bank Register:**
+    -   **Auto Bank Subtraction:** Payroll costs are automatically deducted from your register.
     -   **Reconciliation:** Mark transactions as reconciled to balance your books.
-    -   **Dynamic Filtering:** Instantly filter your register by date, description, or reconciled status.
-    -   **CSV Export:** Export the currently filtered view of your transactions to a CSV file.
-    -   **Data Purge:** Safely purge old, reconciled transactions to keep your register clean.
+    -   **Inline Editing:** Edit transactions directly in the register.
+    -   **Dynamic Filtering:** Instantly filter by date, description, or reconciled status.
+    -   **CSV Import:** Import bank statement CSVs with automatic format detection and optional auto-reconciliation.
+    -   **CSV Export:** Export the currently filtered view to CSV.
+    -   **Data Purge:** Safely purge old reconciled transactions with automatic opening balance creation.
 -   **Data Portability:**
-    Securely export your entire application data to a JSON file for backup and import it just as easily.
+    Securely export your entire application data to a JSON file for backup and import it just as easily. Older backups are automatically migrated to the current format.
 -   **100% Client-Side & Private:**
-    Your data never leaves your computer. **PayTrax** uses your browser's IndexedDB for robust and private local storage.
+    Your data never leaves your computer. **PayTrax** uses your browser's IndexedDB for robust and private local storage with automatic unsaved-changes warnings.
+-   **Progressive Web App:**
+    Install PayTrax on your device for offline use with full service worker caching.
 
 ## How It Works (Technical Overview)
 
 **PayTrax** is built with a modern, modular architecture without relying on any external frameworks.
 
 -   **Vanilla JavaScript (ES Modules):**
-    The code is logically separated into modules for state management (`state.js`), payroll logic (`logic.js`), UI rendering (`ui.js`), banking operations (`banking.js`), and data persistence (`db.js`), making it clean and maintainable.
+    The code is logically separated into 12 modules: core calculations (`logic.js`), employee management (`employees.js`), tax reports (`reports.js`), state management (`state.js`), UI rendering (`ui.js`), banking operations (`banking.js`), data persistence (`db.js`), data migration (`migration.js`), date utilities (`utils.js`), validation (`validation.js`), PDF export (`pdf-export.js`), and JSON import/export (`data-io.js`).
 -   **Single State Object:**
     The entire application's state is managed in a single `appData` object, providing a single source of truth for all calculations and UI updates.
 -   **IndexedDB Persistence:**
-    **PayTrax** uses the browser's IndexedDB to reliably store all application data. It includes a graceful fallback to localStorage and a migration path to ensure data integrity.
+    **PayTrax** uses the browser's IndexedDB to reliably store all application data. It includes a graceful fallback to localStorage, debounced saves for performance, and immediate saves for critical operations.
 -   **Data Versioning & Migration:**
-    The import functionality includes a versioning and migration system, allowing data from older versions of the application to be safely imported and updated to the latest structure.
+    The application includes a comprehensive versioning and migration system (currently at v9). Data migrations run automatically both on startup (IndexedDB load) and during JSON import, ensuring older data is always brought up to date.
+-   **Automated Testing:**
+    301 tests across 11 test files using Vitest with Playwright browser mode, covering payroll calculations, tax reports, wage base caps, sequential recalculation, deductions, migrations, utilities, validation, and database operations.
 
 ## Getting Started
 
@@ -67,6 +79,12 @@ Because **PayTrax** is a fully client-side application, getting started is incre
     python -m http.server
     ```
     Then, open your browser and navigate to `http://localhost:8000`.
+
+4.  **Run tests (optional):**
+    ```sh
+    npm install   # First time only
+    npm test      # Run all 301 tests
+    ```
 
 ## License & AI Attribution
 

@@ -239,7 +239,7 @@ Single module import triggers entire app initialization. Service Worker is regis
 
 **Current Version:** 9
 
-Old backups are automatically migrated when imported. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v9 transformations are applied.
+Data is automatically migrated both on IndexedDB load (startup) and during JSON import. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v9 transformations are applied. `CURRENT_VERSION` is defined in `migration.js` and re-exported from `state.js`.
 
 **Version History:**
 - v1 → Initial structure
