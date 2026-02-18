@@ -8,10 +8,10 @@
 */
 // js/state.js
 import * as db from './db.js';
+import { migrateData, CURRENT_VERSION } from './migration.js';
+export { CURRENT_VERSION }; // Re-export so existing consumers (data-io.js) still work
 
 // --- CONFIGURATION & DEFAULT STATE ---
-
-export const CURRENT_VERSION = 9; // Incremented from 8 to 9
 
 // Constants used ONLY for defaultAppData initialization below.
 // All runtime code should read from appData.settings (the single source of truth).
@@ -191,6 +191,12 @@ export async function loadData() {
         if (!Array.isArray(loadedData.bankRegister)) {
             console.error('Loaded data has invalid bankRegister structure. Using empty array.');
             loadedData.bankRegister = [];
+        }
+
+        // Run migrations if data is from an older version
+        if ((loadedData.version || 1) < CURRENT_VERSION) {
+            console.log(`Data version ${loadedData.version || 1} detected. Migrating to v${CURRENT_VERSION}...`);
+            loadedData = migrateData(loadedData);
         }
 
         appData = loadedData;

@@ -6,7 +6,9 @@
   This file is original work based on documentation and prompts by greenwh.
   Licensed under the MIT License.
 */
-import { CURRENT_VERSION } from './state.js';
+// The authoritative data version number lives here in migration.js.
+// state.js and data-io.js import it from here.
+export const CURRENT_VERSION = 9;
 
 /**
  * Migrates a data object to a new version by adding a new setting with a default value.
