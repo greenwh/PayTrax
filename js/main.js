@@ -9,7 +9,7 @@
 // js/main.js
 
 // --- MODULE IMPORTS ---
-import { loadData, saveData } from './state.js';
+import { appData, loadData, saveData, saveDataImmediate, isDirty } from './state.js';
 import * as ui from './ui.js';
 import * as logic from './logic.js';
 import * as banking from './banking.js'; // Import the new banking module
@@ -34,11 +34,18 @@ function handleTabClick(event) {
 /**
  * Handles changes to any of the settings fields.
  */
-function handleSettingsChange() {
+async function handleSettingsChange() {
     logic.updateSettingsFromUI();
+
+    // Validate settings after reading from UI
+    const settingsErrors = validation.validateSettings(appData.settings);
+    if (settingsErrors.length > 0) {
+        console.warn('Settings validation warnings:', settingsErrors);
+    }
+
     logic.generatePayPeriods();
     handleEmployeeChange(); // Refresh dropdowns and data
-    saveData();
+    await saveDataImmediate();
 }
 
 /**
@@ -101,7 +108,7 @@ function handleHoursChange() {
  * Handles the submission of the employee form (add/edit).
  * @param {Event} event - The form submission event.
  */
-function handleEmployeeFormSubmit(event) {
+async function handleEmployeeFormSubmit(event) {
     event.preventDefault();
 
     // Gather employee data from form
@@ -127,7 +134,7 @@ function handleEmployeeFormSubmit(event) {
     logic.saveEmployeeFromForm();
     ui.populateEmployeeDropdowns();
     ui.resetEmployeeForm();
-    saveData();
+    await saveDataImmediate();
 }
 
 /**
@@ -141,19 +148,19 @@ function handleEditEmployeeSelect() {
 /**
  * Handles deleting an employee.
  */
-function handleDeleteEmployee() {
+async function handleDeleteEmployee() {
     if (confirm('Are you sure you want to delete this employee and all their payroll data?')) {
         logic.deleteEmployee();
         ui.populateEmployeeDropdowns();
         ui.resetEmployeeForm();
-        saveData();
+        await saveDataImmediate();
     }
 }
 
 /**
  * Handles adding a deduction to an employee.
  */
-function handleAddDeduction() {
+async function handleAddDeduction() {
     const employeeId = document.getElementById('employeeId').value;
     if (!employeeId) {
         alert('Please save the employee first before adding deductions.');
@@ -179,11 +186,10 @@ function handleAddDeduction() {
         document.getElementById('deductionName').value = '';
         document.getElementById('deductionAmount').value = '';
         document.getElementById('deductionType').value = 'fixed';
-        saveData();
 
         // Trigger recalculation of all periods for this employee
         logic.recalculateAllPeriodsForEmployee(employeeId);
-        saveData();
+        await saveDataImmediate();
     }
 }
 
@@ -191,7 +197,7 @@ function handleAddDeduction() {
  * Handles deleting a deduction (delegated event handler).
  * @param {Event} event - The click event
  */
-function handleDeleteDeduction(event) {
+async function handleDeleteDeduction(event) {
     const deleteButton = event.target.closest('.delete-deduction-btn');
     if (!deleteButton) return;
 
@@ -203,11 +209,10 @@ function handleDeleteDeduction(event) {
     const success = logic.deleteDeduction(employeeId, deductionId);
     if (success) {
         ui.renderDeductionsTable(employeeId);
-        saveData();
 
         // Trigger recalculation of all periods for this employee
         logic.recalculateAllPeriodsForEmployee(employeeId);
-        saveData();
+        await saveDataImmediate();
     }
 }
 
@@ -352,6 +357,14 @@ async function init() {
     banking.initBanking(); // Initialize event listeners for the banking module
     handleEmployeeChange(); // Set initial dashboard state
 }
+
+// Warn user about unsaved changes before leaving
+window.addEventListener('beforeunload', (event) => {
+    if (isDirty()) {
+        event.preventDefault();
+        event.returnValue = ''; // Required for Chrome < 119 and older browsers
+    }
+});
 
 // Start the application once the window is loaded
 window.addEventListener('load', init);

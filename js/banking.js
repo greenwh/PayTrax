@@ -8,7 +8,7 @@
 */
 // js/banking.js
 
-import { appData, saveData } from './state.js';
+import { appData, saveData, saveDataImmediate } from './state.js';
 import { generateBasePayPeriods } from './logic.js';
 
 // --- EVENT HANDLER FUNCTIONS (Internal to this module) ---
@@ -97,7 +97,7 @@ function handlePurgeConfirm() {
         alert(message);
 
         displayRegister();
-        saveData();
+        saveDataImmediate();
     }
 }
 
@@ -142,7 +142,7 @@ function addTransactionFromForm() {
 export function addTransaction(date, description, type, amount, id = null, silent = false, reconciled = false) {
     if (amount <= 0 || !description || !date) return;
     appData.bankRegister.push({
-        id: id || `trans_${new Date().getTime()}`,
+        id: id || (crypto.randomUUID?.() || 'trans_' + Date.now() + '_' + Math.random().toString(36).slice(2)),
         date, description,
         debit: type === 'debit' ? amount : 0,
         credit: type === 'credit' ? amount : 0,
@@ -191,7 +191,7 @@ function enableEditMode(transId) {
         }
 
         if (trans.id === transId) {
-            // Edit mode
+            // Edit mode - build with safe DOM methods
             const dateFormatted = trans.date.includes('/') ? trans.date.split('/') : ['', '', ''];
             const dateValue = dateFormatted.length === 3 ?
                 `${dateFormatted[2]}-${dateFormatted[0].padStart(2, '0')}-${dateFormatted[1].padStart(2, '0')}` : '';
@@ -199,48 +199,113 @@ function enableEditMode(transId) {
             const isDebit = trans.debit > 0;
             const amount = isDebit ? trans.debit : trans.credit;
 
-            row.innerHTML = `
-                <td><input type="date" id="edit-date-${trans.id}" class="form-input" value="${dateValue}" style="padding: 5px; width: 150px;"></td>
-                <td><input type="text" id="edit-desc-${trans.id}" class="form-input" value="${trans.description}" style="padding: 5px;"></td>
-                <td colspan="2">
-                    <select id="edit-type-${trans.id}" class="form-input" style="padding: 5px; width: 100px;">
-                        <option value="debit" ${isDebit ? 'selected' : ''}>Debit</option>
-                        <option value="credit" ${!isDebit ? 'selected' : ''}>Credit</option>
-                    </select>
-                    <input type="number" id="edit-amount-${trans.id}" class="form-input" value="${amount}" step="0.01" style="padding: 5px; width: 100px;">
-                </td>
-                <td>$${balanceMap.get(trans.id).toFixed(2)}</td>
-                <td style="text-align: center;">
-                    <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}">
-                </td>
-                <td>
-                    <button class="btn btn-success btn-sm save-transaction-btn" data-id="${trans.id}">Save</button>
-                    <button class="btn btn-secondary btn-sm cancel-transaction-btn">Cancel</button>
-                </td>
-            `;
+            const dateTd = document.createElement('td');
+            const dateInput = document.createElement('input');
+            dateInput.type = 'date';
+            dateInput.id = `edit-date-${trans.id}`;
+            dateInput.className = 'form-input';
+            dateInput.value = dateValue;
+            dateInput.style.cssText = 'padding: 5px; width: 150px;';
+            dateTd.appendChild(dateInput);
+
+            const descTd = document.createElement('td');
+            const descInput = document.createElement('input');
+            descInput.type = 'text';
+            descInput.id = `edit-desc-${trans.id}`;
+            descInput.className = 'form-input';
+            descInput.value = trans.description;
+            descInput.style.cssText = 'padding: 5px;';
+            descTd.appendChild(descInput);
+
+            const amountTd = document.createElement('td');
+            amountTd.colSpan = 2;
+            const typeSelect = document.createElement('select');
+            typeSelect.id = `edit-type-${trans.id}`;
+            typeSelect.className = 'form-input';
+            typeSelect.style.cssText = 'padding: 5px; width: 100px;';
+            const debitOpt = document.createElement('option');
+            debitOpt.value = 'debit';
+            debitOpt.textContent = 'Debit';
+            debitOpt.selected = isDebit;
+            const creditOpt = document.createElement('option');
+            creditOpt.value = 'credit';
+            creditOpt.textContent = 'Credit';
+            creditOpt.selected = !isDebit;
+            typeSelect.append(debitOpt, creditOpt);
+            const amountInput = document.createElement('input');
+            amountInput.type = 'number';
+            amountInput.id = `edit-amount-${trans.id}`;
+            amountInput.className = 'form-input';
+            amountInput.value = amount;
+            amountInput.step = '0.01';
+            amountInput.style.cssText = 'padding: 5px; width: 100px;';
+            amountTd.append(typeSelect, amountInput);
+
+            const balanceTd = document.createElement('td');
+            balanceTd.textContent = '$' + balanceMap.get(trans.id).toFixed(2);
+
+            const reconcileTd = document.createElement('td');
+            reconcileTd.style.textAlign = 'center';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'reconcile-checkbox';
+            checkbox.dataset.id = trans.id;
+            checkbox.checked = trans.reconciled === true;
+            reconcileTd.appendChild(checkbox);
+
+            const actionsTd = document.createElement('td');
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn btn-success btn-sm save-transaction-btn';
+            saveBtn.dataset.id = trans.id;
+            saveBtn.textContent = 'Save';
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn btn-secondary btn-sm cancel-transaction-btn';
+            cancelBtn.textContent = 'Cancel';
+            actionsTd.append(saveBtn, cancelBtn);
+
+            row.append(dateTd, descTd, amountTd, balanceTd, reconcileTd, actionsTd);
         } else {
-            // Normal display mode
-            row.innerHTML = `
-                <td>${trans.date}</td><td>${trans.description}</td>
-                <td class="debit">${trans.debit > 0 ? '$' + trans.debit.toFixed(2) : '-'}</td>
-                <td class="credit">${trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-'}</td>
-                <td>$${balanceMap.get(trans.id).toFixed(2)}</td>
-                <td style="text-align: center;">
-                    <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}">
-                </td>
-                <td>
-                    <button class="btn btn-primary btn-sm edit-transaction-btn" data-id="${trans.id}">Edit</button>
-                    <button class="btn btn-danger btn-sm delete-transaction-btn" data-id="${trans.id}">Delete</button>
-                </td>
-            `;
+            // Normal display mode - build with safe DOM methods
+            const dateTd = document.createElement('td');
+            dateTd.textContent = trans.date;
+
+            const descTd = document.createElement('td');
+            descTd.textContent = trans.description;
+
+            const debitTd = document.createElement('td');
+            debitTd.className = 'debit';
+            debitTd.textContent = trans.debit > 0 ? '$' + trans.debit.toFixed(2) : '-';
+
+            const creditTd = document.createElement('td');
+            creditTd.className = 'credit';
+            creditTd.textContent = trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-';
+
+            const balanceTd = document.createElement('td');
+            balanceTd.textContent = '$' + balanceMap.get(trans.id).toFixed(2);
+
+            const reconcileTd = document.createElement('td');
+            reconcileTd.style.textAlign = 'center';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'reconcile-checkbox';
+            checkbox.dataset.id = trans.id;
+            checkbox.checked = trans.reconciled === true;
+            reconcileTd.appendChild(checkbox);
+
+            const actionsTd = document.createElement('td');
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-primary btn-sm edit-transaction-btn';
+            editBtn.dataset.id = trans.id;
+            editBtn.textContent = 'Edit';
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-danger btn-sm delete-transaction-btn';
+            deleteBtn.dataset.id = trans.id;
+            deleteBtn.textContent = 'Delete';
+            actionsTd.append(editBtn, deleteBtn);
+
+            row.append(dateTd, descTd, debitTd, creditTd, balanceTd, reconcileTd, actionsTd);
         }
         tbody.appendChild(row);
-
-        // Set checkbox state programmatically after adding to DOM to avoid innerHTML issues
-        const checkbox = row.querySelector('.reconcile-checkbox');
-        if (checkbox) {
-            checkbox.checked = trans.reconciled === true;
-        }
     });
 
     const currentBalanceEl = document.getElementById('currentBalance');
@@ -318,7 +383,7 @@ function purgeTransactions(cutoffDateStr) {
     // Add opening balance transaction (only if non-zero)
     if (openingBalance !== 0) {
         const openingBalanceTx = {
-            id: `trans_opening_${new Date().getTime()}`,
+            id: crypto.randomUUID?.() || 'trans_opening_' + Date.now() + '_' + Math.random().toString(36).slice(2),
             date: openingBalanceDateStr,
             description: 'Opening Balance',
             debit: openingBalance < 0 ? Math.abs(openingBalance) : 0,
@@ -442,26 +507,47 @@ export function displayRegister() {
             row.classList.add('reconciled');
         }
 
-        row.innerHTML = `
-            <td>${trans.date}</td><td>${trans.description}</td>
-            <td class="debit">${trans.debit > 0 ? '$' + trans.debit.toFixed(2) : '-'}</td>
-            <td class="credit">${trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-'}</td>
-            <td>$${balanceMap.get(trans.id).toFixed(2)}</td>
-            <td style="text-align: center;">
-                <input type="checkbox" class="reconcile-checkbox" data-id="${trans.id}">
-            </td>
-            <td>
-                <button class="btn btn-primary btn-sm edit-transaction-btn" data-id="${trans.id}">Edit</button>
-                <button class="btn btn-danger btn-sm delete-transaction-btn" data-id="${trans.id}">Delete</button>
-            </td>
-        `;
-        tbody.appendChild(row);
+        // Build cells using safe DOM methods to prevent XSS from imported descriptions
+        const dateTd = document.createElement('td');
+        dateTd.textContent = trans.date;
 
-        // Set checkbox state programmatically after adding to DOM to avoid innerHTML issues
-        const checkbox = row.querySelector('.reconcile-checkbox');
-        if (checkbox) {
-            checkbox.checked = trans.reconciled === true;
-        }
+        const descTd = document.createElement('td');
+        descTd.textContent = trans.description;
+
+        const debitTd = document.createElement('td');
+        debitTd.className = 'debit';
+        debitTd.textContent = trans.debit > 0 ? '$' + trans.debit.toFixed(2) : '-';
+
+        const creditTd = document.createElement('td');
+        creditTd.className = 'credit';
+        creditTd.textContent = trans.credit > 0 ? '$' + trans.credit.toFixed(2) : '-';
+
+        const balanceTd = document.createElement('td');
+        balanceTd.textContent = '$' + balanceMap.get(trans.id).toFixed(2);
+
+        const reconcileTd = document.createElement('td');
+        reconcileTd.style.textAlign = 'center';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'reconcile-checkbox';
+        checkbox.dataset.id = trans.id;
+        checkbox.checked = trans.reconciled === true;
+        reconcileTd.appendChild(checkbox);
+
+        const actionsTd = document.createElement('td');
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-primary btn-sm edit-transaction-btn';
+        editBtn.dataset.id = trans.id;
+        editBtn.textContent = 'Edit';
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-danger btn-sm delete-transaction-btn';
+        deleteBtn.dataset.id = trans.id;
+        deleteBtn.textContent = 'Delete';
+        actionsTd.appendChild(editBtn);
+        actionsTd.appendChild(deleteBtn);
+
+        row.append(dateTd, descTd, debitTd, creditTd, balanceTd, reconcileTd, actionsTd);
+        tbody.appendChild(row);
     });
     
     const currentBalanceEl = document.getElementById('currentBalance');
@@ -695,7 +781,7 @@ function importCsvTransactions(csvContent, autoReconcile) {
     }
 
     displayRegister();
-    saveData();
+    saveDataImmediate();
 
     const message = autoReconcile
         ? `Import complete!\n\nAdded: ${addedCount} new transactions\nReconciled: ${reconciledCount} existing transactions\nSkipped: ${skippedCount} duplicates`

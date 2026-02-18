@@ -62,19 +62,17 @@ describe('Employee Deductions', () => {
     });
 
     it('should generate unique IDs for deductions', () => {
-      // Add deductions with a small delay to ensure unique timestamps
       addDeduction(employee.id, 'Deduction 1', 50, 'fixed');
 
-      // IDs should start with 'ded_'
-      expect(employee.deductions[0].id).toMatch(/^ded_/);
-
-      // Add another and check it has an ID
-      addDeduction(employee.id, 'Deduction 2', 75, 'fixed');
-      expect(employee.deductions[1].id).toMatch(/^ded_/);
-
-      // Both should have IDs defined
+      // ID should be a UUID or fallback format
       expect(employee.deductions[0].id).toBeDefined();
+      expect(typeof employee.deductions[0].id).toBe('string');
+      expect(employee.deductions[0].id.length).toBeGreaterThan(0);
+
+      // Add another and check uniqueness
+      addDeduction(employee.id, 'Deduction 2', 75, 'fixed');
       expect(employee.deductions[1].id).toBeDefined();
+      expect(employee.deductions[0].id).not.toBe(employee.deductions[1].id);
     });
 
     it('should add createdDate to the deduction', () => {
@@ -400,5 +398,66 @@ describe('Deductions with Pre-existing Employee', () => {
     addDeduction(employee.id, 'New Deduction', 50, 'fixed');
 
     expect(employee.deductions.length).toBe(initialCount + 1);
+  });
+});
+
+describe('Deduction Exceeding Gross Pay', () => {
+  let employee;
+
+  beforeEach(() => {
+    Object.assign(appData, JSON.parse(JSON.stringify(defaultAppData)));
+    appData.settings = createTestSettings({
+      taxYear: 2024,
+      payFrequency: 'bi-weekly',
+      firstPayPeriodStartDate: '2024-01-01'
+    });
+
+    employee = createTestEmployee({
+      rate: 25,
+      fedTaxRate: 12,
+      stateTaxRate: 5,
+      localTaxRate: 2
+    });
+    appData.employees.push(employee);
+    generatePayPeriods();
+  });
+
+  it('should allow net pay to go negative when deduction exceeds gross pay', () => {
+    // Add a $5,000 fixed deduction (exceeds $2,000 gross for 80hrs at $25/hr)
+    employee.deductions.push({
+      id: 'ded-large-1',
+      name: 'Large Garnishment',
+      amount: 5000,
+      type: 'fixed',
+      createdDate: '2023-12-01'
+    });
+
+    const result = calculatePayFromData(employee.id, 1, {
+      regular: 80, overtime: 0, pto: 0, holiday: 0
+    });
+
+    // Gross: $2,000
+    expect(result.grossPay).toBe(2000);
+
+    // Total deductions: $5,000
+    expect(result.totalDeductions).toBe(5000);
+
+    // Employee taxes: $533 (240 + 100 + 40 + 124 + 29)
+    expect(result.taxes.total).toBe(533);
+
+    // Net pay goes negative: $2000 - $533 - $5000 = -$3533
+    // Current behavior: no clamping, net pay is negative
+    expect(result.netPay).toBe(-3533);
+    expect(result.netPay).toBeLessThan(0);
+  });
+
+  it('should calculate deduction total correctly even when exceeding gross', () => {
+    const deductionResult = calculateDeductions(
+      { deductions: [{ id: 'd1', name: 'Big Ded', amount: 5000, type: 'fixed' }] },
+      2000
+    );
+
+    // calculateDeductions does not cap - returns the full deduction amount
+    expect(deductionResult.total).toBe(5000);
   });
 });

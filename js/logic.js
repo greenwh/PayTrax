@@ -6,7 +6,7 @@
   This file is original work based on documentation and prompts by greenwh.
   Licensed under the MIT License.
 */
-import { appData, SS_WAGE_BASE, FUTA_WAGE_BASE, SUTA_WAGE_BASE } from './state.js';
+import { appData } from './state.js';
 import { formatDate, parseDateInput } from './utils.js';
 import { addTransaction } from './banking.js'; // Import from new banking module
 
@@ -200,9 +200,9 @@ export function recalculatePeriod(employeeId, periodNum) {
     });
 
     // Retrieve wage base settings
-    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
-    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
-    const sutaWageBase = appData.settings.sutaWageBase || SUTA_WAGE_BASE;
+    const ssWageBase = appData.settings.ssWageBase;
+    const futaWageBase = appData.settings.futaWageBase;
+    const sutaWageBase = appData.settings.sutaWageBase;
 
     // Calculate taxable wages for each capped tax type
     // If YTD already exceeds the cap, taxable wages for this period = 0
@@ -385,142 +385,6 @@ export function calculatePay() {
 }
 
 /**
- * Calculates a single pay period using data from the UI inputs.
- * This is the original calculation logic, now extracted into its own function.
- * Only use this when you're certain no sequential recalculation is needed.
- * @param {string} employeeId - The ID of the employee
- * @param {number} periodNum - The period number to calculate
- */
-function recalculateSinglePeriodFromUI(employeeId, periodNum) {
-    const employeeIndex = appData.employees.findIndex(e => e.id === employeeId);
-    if (employeeIndex === -1) return;
-
-    const employee = appData.employees[employeeIndex];
-    const period = appData.payPeriods[employeeId].find(p => p.period == periodNum);
-    if (!period) return;
-
-    // Ensure taxRemainders object exists for backward compatibility
-    if (!employee.taxRemainders) {
-        employee.taxRemainders = { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
-    }
-
-    const payDate = period.payDate; // Get pay date for deduction filtering
-
-    const hours = {
-        regular: parseFloat(document.getElementById('regularHours').value) || 0,
-        overtime: parseFloat(document.getElementById('overtimeHours').value) || 0,
-        pto: parseFloat(document.getElementById('ptoHours').value) || 0,
-        holiday: parseFloat(document.getElementById('holidayHours').value) || 0,
-    };
-
-    const earnings = {
-        regular: hours.regular * employee.rate,
-        overtime: hours.overtime * employee.rate * employee.overtimeMultiplier,
-        holiday: hours.holiday * employee.rate * employee.holidayMultiplier,
-        pto: hours.pto * employee.rate
-    };
-
-    const grossPay = Object.values(earnings).reduce((sum, val) => sum + val, 0);
-    const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
-
-    // Compute YTD gross wages BEFORE this period for wage base cap enforcement
-    const year = new Date(period.payDate).getFullYear();
-    const allPeriodsForEmployee = appData.payPeriods[employeeId] || [];
-    let ytdGrossBeforeThisPeriod = 0;
-
-    allPeriodsForEmployee.forEach(p => {
-        if (p.period < period.period
-            && new Date(p.payDate).getFullYear() === year
-            && p.grossPay > 0) {
-            ytdGrossBeforeThisPeriod += p.grossPay;
-        }
-    });
-
-    // Retrieve wage base settings
-    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
-    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
-    const sutaWageBase = appData.settings.sutaWageBase || SUTA_WAGE_BASE;
-
-    function getTaxableWages(ytdBefore, currentGross, wageBase) {
-        if (ytdBefore >= wageBase) return 0;
-        return Math.min(currentGross, wageBase - ytdBefore);
-    }
-
-    const ssTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, ssWageBase);
-    const futaTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, futaWageBase);
-    const sutaTaxableWages = getTaxableWages(ytdGrossBeforeThisPeriod, grossPay, sutaWageBase);
-
-    // --- Running Remainder Calculation Logic ---
-    const unrounded = {};
-    const rounded = {};
-    const newRemainders = {};
-
-    const calculateTaxWithRemainder = (taxName, calculation) => {
-        const previousRemainder = employee.taxRemainders[taxName] || 0;
-        unrounded[taxName] = calculation;
-        const totalToConsider = unrounded[taxName] + previousRemainder;
-        // Round half up for currency (not banker's rounding)
-        rounded[taxName] = Math.round(totalToConsider * 100) / 100;
-        newRemainders[taxName] = totalToConsider - rounded[taxName];
-    };
-
-    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));         // NO cap
-    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));          // NO cap
-    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));          // NO cap
-    calculateTaxWithRemainder('fica', ssTaxableWages * (socialSecurity / 100));            // CAPPED by SS wage base
-    calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));                    // NO cap
-    calculateTaxWithRemainder('suta', sutaTaxableWages * (sutaRate / 100));                // CAPPED by SUTA wage base
-    calculateTaxWithRemainder('futa', futaTaxableWages * (futaRate / 100));                // CAPPED by FUTA wage base
-
-    // Update the employee's stored remainders for the next pay run
-    appData.employees[employeeIndex].taxRemainders = newRemainders;
-
-    const employeeTaxes = rounded.federal + rounded.state + rounded.local + rounded.fica + rounded.medicare;
-
-    // Calculate deductions (only apply those created on or before this pay date)
-    const { deductions, total: totalDeductions } = calculateDeductions(employee, grossPay, payDate);
-
-    const netPay = grossPay - employeeTaxes - totalDeductions;
-
-    // --- PTO Calculation (remains the same) ---
-    const originalPtoUsed = period.hours.pto || 0;
-    const originalPtoAccrued = period.ptoAccrued || 0;
-    let ptoAccruedThisPeriod = 0;
-    let currentPtoBalance = (employee.ptoBalance + originalPtoUsed) - originalPtoAccrued;
-    const totalOriginalHours = period.hours ? Object.values(period.hours).reduce((a, b) => a + b, 0) : 0;
-    if (totalOriginalHours === 0 && (hours.regular > 0 || hours.overtime > 0)) {
-         const periodsInYear = (appData.payPeriods[employeeId] || []).length;
-         if (periodsInYear > 0) ptoAccruedThisPeriod = employee.ptoAccrualRate / periodsInYear;
-    } else {
-        ptoAccruedThisPeriod = originalPtoAccrued;
-    }
-	appData.employees[employeeIndex].ptoBalance = parseFloat(((currentPtoBalance + ptoAccruedThisPeriod) - hours.pto).toFixed(2));
-
-    // --- Update Period Data in State ---
-    period.hours = hours;
-    period.earnings = earnings;
-    period.grossPay = grossPay;
-    period.netPay = netPay;
-    period.ptoAccrued = ptoAccruedThisPeriod;
-    period.taxes = { ...rounded, total: employeeTaxes, unrounded };
-    period.deductions = deductions;
-    period.totalDeductions = totalDeductions;
-
-    // --- Update Bank Register (only if autoSubtraction is enabled) ---
-    if (appData.settings.autoSubtraction !== false) {
-        const totalPayrollCost = grossPay + rounded.suta + rounded.futa + rounded.fica + rounded.medicare;
-        const transactionId = `payroll-${employee.id}-${period.period}-${appData.settings.taxYear}`;
-        // Preserve reconciled status before removing
-        const existingTransaction = appData.bankRegister.find(t => t.id === transactionId);
-        const wasReconciled = existingTransaction ? existingTransaction.reconciled : false;
-        appData.bankRegister = appData.bankRegister.filter(t => t.id !== transactionId);
-        if (totalPayrollCost > 0) {
-            addTransaction(period.payDate, `Payroll: ${employee.name} - P${period.period}`, 'debit', totalPayrollCost, transactionId, true, wasReconciled);
-        }
-    }
-}
-
-/**
  * Gathers all necessary data for rendering a pay stub.
  * @param {string} employeeId - The ID of the employee.
  * @param {string} periodNum - The pay period number.
@@ -556,7 +420,7 @@ export function getPayStubData(employeeId, periodNum) {
 export function saveEmployeeFromForm() {
     const employeeId = document.getElementById('employeeId').value;
     const employeeData = {
-        id: employeeId || `emp_${new Date().getTime()}`,
+        id: employeeId || (crypto.randomUUID?.() || 'emp_' + Date.now() + '_' + Math.random().toString(36).slice(2)),
         idNumber: document.getElementById('idNumber').value,
         name: document.getElementById('employeeName').value,
         address: document.getElementById('employeeAddress').value,
@@ -618,7 +482,7 @@ export function addDeduction(employeeId, name, amount, type = 'fixed') {
     }
 
     const deduction = {
-        id: `ded_${new Date().getTime()}`,
+        id: crypto.randomUUID?.() || 'ded_' + Date.now() + '_' + Math.random().toString(36).slice(2),
         name: name,
         amount: parseFloat(amount),
         type: type,
@@ -884,7 +748,7 @@ export function generateTaxDepositReport() {
 
 export function generateW2Report(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
-    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+    const ssWageBase = appData.settings.ssWageBase;
     let reportHTML = `<h4>Annual W-2 Data - ${year}</h4>`;
 
     if (appData.employees.length === 0) return `<div class="alert alert-info">No employees found.</div>`;
@@ -927,11 +791,11 @@ export function generate941Report(periodStr) {
     if (!start) return `<div class="alert alert-info">Invalid period. Use format "Q1 2025".</div>`;
 
     const year = start.getFullYear();
-    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
-    const additionalMedicareThreshold = appData.settings.additionalMedicareThreshold || 200000;
-    const additionalMedicareRate = (appData.settings.additionalMedicareRate || 0.9) / 100;
-    const ficaTotalRate = (appData.settings.socialSecurity || 6.2) / 100 * 2; // Both employer and employee
-    const medicareTotalRate = (appData.settings.medicare || 1.45) / 100 * 2; // Both employer and employee
+    const ssWageBase = appData.settings.ssWageBase;
+    const additionalMedicareThreshold = appData.settings.additionalMedicareThreshold;
+    const additionalMedicareRate = appData.settings.additionalMedicareRate / 100;
+    const ficaTotalRate = appData.settings.socialSecurity / 100 * 2; // Both employer and employee
+    const medicareTotalRate = appData.settings.medicare / 100 * 2; // Both employer and employee
 
     const allPayPeriodsInQuarter = [].concat.apply([], Object.values(appData.payPeriods))
         .filter(p => {
@@ -1067,7 +931,7 @@ export function generate941Report(periodStr) {
 
 export function generate940Report(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
-    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
+    const futaWageBase = appData.settings.futaWageBase;
     const futaRate = appData.settings.futaRate / 100;
 
     const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods));
@@ -1164,7 +1028,7 @@ export function generate940Report(yearStr) {
  */
 export function exportW2ReportToCSV(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
-    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+    const ssWageBase = appData.settings.ssWageBase;
 
     let csvContent = "Employee Name,Employee ID,Wages,Federal Tax,FICA,Medicare,SS Wages,State Tax,Local Tax\n";
 
@@ -1256,7 +1120,7 @@ export function export941ReportToCSV(periodStr) {
  */
 export function export940ReportToCSV(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
-    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
+    const futaWageBase = appData.settings.futaWageBase;
     const futaRate = appData.settings.futaRate / 100;
 
     const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods));

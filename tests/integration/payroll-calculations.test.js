@@ -270,6 +270,43 @@ describe('Payroll Calculations', () => {
       expect(result.earnings.pto).toBe(0);
       expect(result.earnings.holiday).toBe(0);
     });
+
+    it('should calculate correctly with zero tax rates (FICA/Medicare still apply)', () => {
+      const zeroTaxEmployee = createTestEmployee({
+        rate: 25,
+        fedTaxRate: 0,
+        stateTaxRate: 0,
+        localTaxRate: 0
+      });
+      appData.employees.push(zeroTaxEmployee);
+      generatePayPeriods();
+
+      const result = calculatePayFromData(zeroTaxEmployee.id, 1, {
+        regular: 80, overtime: 0, pto: 0, holiday: 0
+      });
+
+      // Gross: $2000
+      expect(result.grossPay).toBe(2000);
+
+      // Employee tax rates are zero
+      expect(result.taxes.federal).toBe(0);
+      expect(result.taxes.state).toBe(0);
+      expect(result.taxes.local).toBe(0);
+
+      // FICA and Medicare come from settings, not employee rates - still apply
+      expect(result.taxes.fica).toBe(124);      // $2000 * 6.2%
+      expect(result.taxes.medicare).toBe(29);    // $2000 * 1.45%
+
+      // Employer taxes still apply
+      expect(result.taxes.suta).toBe(54);        // $2000 * 2.7%
+      expect(result.taxes.futa).toBe(12);        // $2000 * 0.6%
+
+      // Employee taxes total = only fica + medicare (no fed/state/local)
+      expect(result.taxes.total).toBe(153);      // 124 + 29
+
+      // Net = gross - employee taxes
+      expect(result.netPay).toBe(1847);          // 2000 - 153
+    });
   });
 });
 

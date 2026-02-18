@@ -13,11 +13,14 @@ import * as db from './db.js';
 
 export const CURRENT_VERSION = 8; // Incremented from 7 to 8
 
-// Constants for tax calculations (now also in settings for configurability)
+// Constants used ONLY for defaultAppData initialization below.
+// All runtime code should read from appData.settings (the single source of truth).
 export const SS_WAGE_BASE = 184500;
 export const FUTA_WAGE_BASE = 7000;
 export const SUTA_WAGE_BASE = 25000;
 let dbInitialized = false;
+let _saveTimer = null;
+let _dirty = false;
 
 // Default structure for the application data
 export const defaultAppData = {
@@ -63,25 +66,78 @@ export let appData = {};
 // --- DATA PERSISTENCE ---
 
 /**
- * Saves the current appData object to the best available persistence layer.
- * It will try IndexedDB first, then fall back to localStorage.
+ * Persists appData to the best available storage layer.
+ * @returns {Promise<void>}
  */
-export async function saveData() {
+async function _persistData() {
     try {
         if (dbInitialized) {
             await db.saveDataToDB(appData);
         } else {
             localStorage.setItem('PayTraxData', JSON.stringify(appData));
         }
+        _dirty = false;
     } catch (error) {
         console.error("Failed to save data:", error);
         // Fallback to localStorage just in case DB save fails after initialization
         try {
             localStorage.setItem('PayTraxData', JSON.stringify(appData));
+            _dirty = false;
         } catch (lsError) {
             console.error("Failed to save data to localStorage as a fallback:", lsError);
+            _showSaveWarning();
         }
     }
+}
+
+/**
+ * Shows a non-blocking save warning to the user.
+ */
+function _showSaveWarning() {
+    let warning = document.getElementById('save-warning');
+    if (!warning) {
+        warning = document.createElement('div');
+        warning.id = 'save-warning';
+        warning.style.cssText = 'position:fixed;top:10px;right:10px;background:#dc3545;color:#fff;padding:12px 20px;border-radius:6px;z-index:10000;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+        warning.textContent = 'Warning: Data may not have saved. Please export a backup.';
+        document.body.appendChild(warning);
+        setTimeout(() => warning.remove(), 10000);
+    }
+}
+
+/**
+ * Debounced save — coalesces rapid save calls (e.g. hour input changes).
+ * Use for non-critical operations where a 300ms delay is acceptable.
+ */
+export function saveData() {
+    _dirty = true;
+    if (_saveTimer) clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+        _saveTimer = null;
+        _persistData();
+    }, 300);
+}
+
+/**
+ * Immediate save — bypasses debounce and returns a Promise.
+ * Use for critical operations: employee delete/add, settings changes, purge, import.
+ * @returns {Promise<void>}
+ */
+export async function saveDataImmediate() {
+    if (_saveTimer) {
+        clearTimeout(_saveTimer);
+        _saveTimer = null;
+    }
+    _dirty = true;
+    await _persistData();
+}
+
+/**
+ * Returns whether there are unsaved changes.
+ * @returns {boolean}
+ */
+export function isDirty() {
+    return _dirty;
 }
 
 /**
@@ -119,6 +175,24 @@ export async function loadData() {
     }
 
     if (loadedData) {
+        // Validate structural integrity
+        if (!loadedData.settings || typeof loadedData.settings !== 'object') {
+            console.error('Loaded data has invalid settings structure. Using defaults.');
+            loadedData.settings = JSON.parse(JSON.stringify(defaultAppData.settings));
+        }
+        if (!Array.isArray(loadedData.employees)) {
+            console.error('Loaded data has invalid employees structure. Using empty array.');
+            loadedData.employees = [];
+        }
+        if (!loadedData.payPeriods || typeof loadedData.payPeriods !== 'object') {
+            console.error('Loaded data has invalid payPeriods structure. Using empty object.');
+            loadedData.payPeriods = {};
+        }
+        if (!Array.isArray(loadedData.bankRegister)) {
+            console.error('Loaded data has invalid bankRegister structure. Using empty array.');
+            loadedData.bankRegister = [];
+        }
+
         appData = loadedData;
         // Gracefully add new settings properties if loading older data structures
         if (!appData.settings.taxFrequencies) {

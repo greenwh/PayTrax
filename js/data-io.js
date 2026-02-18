@@ -8,7 +8,7 @@
 */
 // js/data-io.js
 
-import { appData, saveData, replaceState, CURRENT_VERSION } from './state.js';
+import { appData, saveDataImmediate, replaceState, CURRENT_VERSION } from './state.js';
 import { migrateData } from './migration.js';
 
 /**
@@ -47,7 +47,7 @@ export function importData() {
                 }
 
                 replaceState(importedData);
-                await saveData(); 
+                await saveDataImmediate();
 
                 alert(message + ' The application will now reload.');
                 window.location.reload();

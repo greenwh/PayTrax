@@ -9,7 +9,6 @@
 // js/pdf-export.js - PDF export functionality using jsPDF
 
 import { appData } from './state.js';
-import { SS_WAGE_BASE, FUTA_WAGE_BASE } from './state.js';
 
 /**
  * Exports pay stub to PDF
@@ -262,7 +261,7 @@ function calculateYTDDeductions(employeeId, periodNum) {
  */
 export function exportW2ReportToPDF(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
-    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+    const ssWageBase = appData.settings.ssWageBase;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -343,7 +342,7 @@ export function export941ReportToPDF(periodStr) {
 
     // Note: We'll need to recalculate the 941 data here
     // For simplicity, I'll create a summary table
-    const ssWageBase = appData.settings.ssWageBase || SS_WAGE_BASE;
+    const ssWageBase = appData.settings.ssWageBase;
     const additionalMedicareThreshold = appData.settings.additionalMedicareThreshold || 200000;
     const ficaTotalRate = (appData.settings.socialSecurity || 6.2) / 100 * 2;
     const medicareTotalRate = (appData.settings.medicare || 1.45) / 100 * 2;
@@ -381,7 +380,7 @@ export function export941ReportToPDF(periodStr) {
  */
 export function export940ReportToPDF(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
-    const futaWageBase = appData.settings.futaWageBase || FUTA_WAGE_BASE;
+    const futaWageBase = appData.settings.futaWageBase;
     const futaRate = appData.settings.futaRate / 100;
 
     const { jsPDF } = window.jspdf;
