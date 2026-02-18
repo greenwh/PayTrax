@@ -93,7 +93,7 @@ export function createMonthlySettings(overrides = {}) {
  */
 export function createTestAppData(settingsOverrides = {}, employees = []) {
   return {
-    version: 8,
+    version: 9,
     settings: createTestSettings(settingsOverrides),
     employees: employees,
     payPeriods: {},

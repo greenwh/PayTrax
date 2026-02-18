@@ -9,17 +9,71 @@
 import { appData } from './state.js';
 
 /**
- * Formats a Date object into a "MM/DD/YYYY" string.
+ * Formats a Date object into a "YYYY-MM-DD" storage string.
+ * This is the canonical storage format for all dates in PayTrax.
  * @param {Date} date - The date to format.
- * @returns {string} The formatted date string.
+ * @returns {string} The formatted date string in YYYY-MM-DD format.
  */
 export function formatDate(date) {
     const d = new Date(date);
     // Use UTC methods to avoid timezone issues with date-only objects
-    const month = d.getUTCMonth() + 1;
-    const day = d.getUTCDate();
     const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+/**
+ * Alias for formatDate — converts a Date object to "YYYY-MM-DD" storage string.
+ * @param {Date} date - The date to format.
+ * @returns {string} "YYYY-MM-DD"
+ */
+export function toStorageDate(date) {
+    return formatDate(date);
+}
+
+/**
+ * Parses a "YYYY-MM-DD" storage string into a local Date at noon.
+ * Using noon avoids day-boundary timezone issues (UTC midnight can shift the day).
+ * @param {string} dateStr - Date string in "YYYY-MM-DD" format.
+ * @returns {Date} Local Date object at noon.
+ */
+export function fromStorageDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return new Date(NaN);
+    return new Date(dateStr + 'T12:00:00');
+}
+
+/**
+ * Converts a "YYYY-MM-DD" storage string to "M/D/YYYY" for UI display.
+ * @param {string} dateStr - Date string in "YYYY-MM-DD" format.
+ * @returns {string} "M/D/YYYY" display string.
+ */
+export function toDisplayDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr; // Return as-is if not YYYY-MM-DD
+    const month = parseInt(parts[1], 10);
+    const day = parseInt(parts[2], 10);
+    const year = parts[0];
     return `${month}/${day}/${year}`;
+}
+
+/**
+ * Converts a legacy "M/D/YYYY" or "MM/DD/YYYY" date string to "YYYY-MM-DD" storage format.
+ * Used by migration to convert old data.
+ * @param {string} dateStr - Date string in "M/D/YYYY" or "MM/DD/YYYY" format.
+ * @returns {string} "YYYY-MM-DD" storage string.
+ */
+export function fromLegacyDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return dateStr;
+    // Already in YYYY-MM-DD format
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) return dateStr;
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return dateStr;
+    const month = parts[0].padStart(2, '0');
+    const day = parts[1].padStart(2, '0');
+    const year = parts[2];
+    return `${year}-${month}-${day}`;
 }
 
 /**

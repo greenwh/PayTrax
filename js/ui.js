@@ -8,7 +8,7 @@
 */
 import { appData } from './state.js';
 import * as logic from './logic.js';
-import { formatDate, parseDateInput } from './utils.js';
+import { formatDate, parseDateInput, fromStorageDate, toDisplayDate } from './utils.js';
 
 // --- UI & TAB MANAGEMENT ---
 
@@ -93,7 +93,7 @@ export function populatePeriodDropdown(employeeId) {
     appData.payPeriods[employeeId].forEach(period => {
         const option = document.createElement('option');
         option.value = period.period;
-        option.textContent = `Period ${period.period}: ${period.startDate} - ${period.endDate}`;
+        option.textContent = `Period ${period.period}: ${toDisplayDate(period.startDate)} - ${toDisplayDate(period.endDate)}`;
         dropdown.appendChild(option);
     });
     if (Array.from(dropdown.options).some(opt => opt.value === currentVal)) {
@@ -126,8 +126,8 @@ export function displayPayPeriods(employeeId) {
         const totalHours = period.hours ? Object.values(period.hours).reduce((a, b) => a + b, 0) : 0;
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${period.period}</td><td>${period.startDate}</td><td>${period.endDate}</td>
-            <td>${period.payDate}</td><td>${totalHours.toFixed(2)}</td><td>$${period.grossPay.toFixed(2)}</td>
+            <td>${period.period}</td><td>${toDisplayDate(period.startDate)}</td><td>${toDisplayDate(period.endDate)}</td>
+            <td>${toDisplayDate(period.payDate)}</td><td>${totalHours.toFixed(2)}</td><td>$${period.grossPay.toFixed(2)}</td>
             <td>$${period.taxes.federal.toFixed(2)}</td><td>$${period.taxes.state.toFixed(2)}</td>
             <td>$${period.taxes.local.toFixed(2)}</td><td>$${period.taxes.fica.toFixed(2)}</td>
             <td>$${period.taxes.medicare.toFixed(2)}</td>
@@ -161,9 +161,9 @@ export function updateDashboardUI(employeeId, periodNum) {
     }
 
     document.getElementById('periodNumber').textContent = period.period;
-    document.getElementById('startDate').textContent = period.startDate;
-    document.getElementById('endDate').textContent = period.endDate;
-    document.getElementById('payDate').textContent = period.payDate;
+    document.getElementById('startDate').textContent = toDisplayDate(period.startDate);
+    document.getElementById('endDate').textContent = toDisplayDate(period.endDate);
+    document.getElementById('payDate').textContent = toDisplayDate(period.payDate);
     
     const employerTaxes = period.taxes.suta + period.taxes.futa + period.taxes.fica + period.taxes.medicare;
     const totalPayrollCost = period.grossPay + employerTaxes;
@@ -276,9 +276,9 @@ export function renderPayStubUI(employeeId, periodNum) {
     document.getElementById('paystubEmployeeName').textContent = employee.name.toUpperCase();
     document.getElementById('paystubEmployeeAddress').textContent = employee.address;
     document.getElementById('paystubEmployeeId').textContent = employee.idNumber;
-    document.getElementById('paystubStartDate').textContent = period.startDate;
-    document.getElementById('paystubEndDate').textContent = period.endDate;
-    document.getElementById('paystubPayDate').textContent = period.payDate;
+    document.getElementById('paystubStartDate').textContent = toDisplayDate(period.startDate);
+    document.getElementById('paystubEndDate').textContent = toDisplayDate(period.endDate);
+    document.getElementById('paystubPayDate').textContent = toDisplayDate(period.payDate);
     
     const earningsBody = document.getElementById('paystubEarningsBody');
     earningsBody.innerHTML = '';
@@ -391,12 +391,12 @@ export function toggleReportInputs() {
         if (['weekly', 'bi-weekly'].includes(freqToActOn)) {
             const allPeriods = [].concat.apply([], Object.values(appData.payPeriods))
                 .filter(p => p.grossPay > 0)
-                .sort((a,b) => new Date(a.payDate) - new Date(b.payDate));
+                .sort((a,b) => fromStorageDate(a.payDate) - fromStorageDate(b.payDate));
             
             let periodSelector = `<div class="form-group" style="margin-top: 15px;"><label class="form-label">Select Pay Period</label><select id="reportPayPeriod" class="form-input">`;
             if (allPeriods.length > 0) {
                 allPeriods.forEach(p => {
-                    periodSelector += `<option value="${p.payDate}">Pay Date: ${p.payDate} (Period ${p.period})</option>`;
+                    periodSelector += `<option value="${p.payDate}">Pay Date: ${toDisplayDate(p.payDate)} (Period ${p.period})</option>`;
                 });
             } else {
                 periodSelector += `<option value="">No pay periods with data</option>`;

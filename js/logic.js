@@ -7,7 +7,7 @@
   Licensed under the MIT License.
 */
 import { appData } from './state.js';
-import { formatDate, parseDateInput } from './utils.js';
+import { formatDate, parseDateInput, fromStorageDate, toDisplayDate } from './utils.js';
 import { addTransaction } from './banking.js'; // Import from new banking module
 
 // --- PAYROLL & PAY PERIODS ---
@@ -100,9 +100,8 @@ export function generatePayPeriods() {
             if (!oldPeriod) {
                 oldPeriod = existingData.find(p => {
                     if (p.period !== newPeriod.period) return false;
-                    // Parse pay date year - stored in M/D/YYYY format
-                    const payDateParts = p.payDate.split('/');
-                    const payDateYear = parseInt(payDateParts[2], 10);
+                    // Parse pay date year - stored in YYYY-MM-DD format
+                    const payDateYear = fromStorageDate(p.payDate).getFullYear();
                     return payDateYear === appData.settings.taxYear;
                 });
             }
@@ -187,13 +186,13 @@ export function recalculatePeriod(employeeId, periodNum) {
     const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
 
     // Compute YTD gross wages BEFORE this period for wage base cap enforcement
-    const year = new Date(period.payDate).getFullYear();
+    const year = fromStorageDate(period.payDate).getFullYear();
     const allPeriodsForEmployee = appData.payPeriods[employeeId] || [];
     let ytdGrossBeforeThisPeriod = 0;
 
     allPeriodsForEmployee.forEach(p => {
         if (p.period < period.period
-            && new Date(p.payDate).getFullYear() === year
+            && fromStorageDate(p.payDate).getFullYear() === year
             && p.grossPay > 0) {
             ytdGrossBeforeThisPeriod += p.grossPay;
         }
@@ -548,8 +547,8 @@ export function calculateDeductions(employee, grossPay, payDate = null) {
             if (!ded.createdDate) return true;
             // Convert both dates to Date objects for proper comparison
             // payDate is in M/D/YYYY format, createdDate is in YYYY-MM-DD format
-            const payDateObj = new Date(payDate);
-            const createdDateObj = new Date(ded.createdDate);
+            const payDateObj = fromStorageDate(payDate);
+            const createdDateObj = fromStorageDate(ded.createdDate);
             // Only apply if deduction was created on or before the pay date
             return createdDateObj <= payDateObj;
         });
@@ -625,14 +624,14 @@ export function generateTaxDepositReportFromData(selectedFreq, periodInput = nul
     if (['weekly', 'bi-weekly'].includes(selectedFreq)) {
         if (!payDate) return { error: 'Please select a pay period.', liabilities: {}, totalDeposit: 0, periodsIncluded: 0 };
         periodsInDepositRange = allPayPeriods.filter(p => p.payDate === payDate);
-        reportTitle = `Tax Deposit for Pay Date: ${payDate}`;
+        reportTitle = `Tax Deposit for Pay Date: ${toDisplayDate(payDate)}`;
     } else {
         if (!periodInput) return { error: 'Please enter a period (e.g., June, Q2, 2025).', liabilities: {}, totalDeposit: 0, periodsIncluded: 0 };
         const { start, end, title } = parseDateInput(periodInput, selectedFreq);
         if (!start || !end) return { error: 'Invalid period format.', liabilities: {}, totalDeposit: 0, periodsIncluded: 0 };
 
         periodsInDepositRange = allPayPeriods.filter(p => {
-            const pDate = new Date(p.payDate);
+            const pDate = fromStorageDate(p.payDate);
             return pDate >= start && pDate <= end;
         });
         reportTitle = `Tax Deposit for ${title}`;
@@ -754,7 +753,7 @@ export function generateW2Report(yearStr) {
     if (appData.employees.length === 0) return `<div class="alert alert-info">No employees found.</div>`;
 
     appData.employees.forEach(emp => {
-        const periodsInYear = (appData.payPeriods[emp.id] || []).filter(p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0);
+        const periodsInYear = (appData.payPeriods[emp.id] || []).filter(p => fromStorageDate(p.payDate).getFullYear() === year && p.grossPay > 0);
         if (periodsInYear.length === 0) return;
 
         let totals = { gross: 0, federal: 0, fica: 0, medicare: 0, state: 0, local: 0 };
@@ -799,7 +798,7 @@ export function generate941Report(periodStr) {
 
     const allPayPeriodsInQuarter = [].concat.apply([], Object.values(appData.payPeriods))
         .filter(p => {
-            const payDate = new Date(p.payDate);
+            const payDate = fromStorageDate(p.payDate);
             return payDate >= start && payDate <= end && p.grossPay > 0;
         });
 
@@ -826,7 +825,7 @@ export function generate941Report(periodStr) {
         const empPayPeriods = appData.payPeriods[emp.id] || [];
 
         empPayPeriods.forEach(p => {
-            const payDate = new Date(p.payDate);
+            const payDate = fromStorageDate(p.payDate);
             if (payDate.getFullYear() === year && payDate < start && p.grossPay > 0) {
                 ytdSSWages += p.grossPay;
                 ytdGross += p.grossPay;
@@ -834,7 +833,7 @@ export function generate941Report(periodStr) {
         });
 
         const periodsInQuarter = empPayPeriods.filter(p => {
-            const payDate = new Date(p.payDate);
+            const payDate = fromStorageDate(p.payDate);
             return payDate >= start && payDate <= end && p.grossPay > 0;
         });
 
@@ -866,7 +865,7 @@ export function generate941Report(periodStr) {
                 totalUnrounded941Taxes += rounded941TaxThisPeriod;
             }
 
-            const monthIndex = qMonths.indexOf(new Date(p.payDate).getMonth());
+            const monthIndex = qMonths.indexOf(fromStorageDate(p.payDate).getMonth());
             if(monthIndex !== -1) {
                 monthlyLiabilities[monthIndex] += rounded941TaxThisPeriod;
             }
@@ -935,7 +934,7 @@ export function generate940Report(yearStr) {
     const futaRate = appData.settings.futaRate / 100;
 
     const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods));
-    const periodsInYear = allPayPeriods.filter(p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0);
+    const periodsInYear = allPayPeriods.filter(p => fromStorageDate(p.payDate).getFullYear() === year && p.grossPay > 0);
     if (periodsInYear.length === 0) return `<div class="alert alert-info">No payroll data for ${year}.</div>`;
 
     let line3 = 0, line4 = 0, line5 = 0;
@@ -943,7 +942,7 @@ export function generate940Report(yearStr) {
 
     appData.employees.forEach(emp => {
         let ytdFUTAWages = 0;
-        const empPayPeriods = (appData.payPeriods[emp.id] || []).filter(p => new Date(p.payDate).getFullYear() === year).sort((a,b) => a.period - b.period);
+        const empPayPeriods = (appData.payPeriods[emp.id] || []).filter(p => fromStorageDate(p.payDate).getFullYear() === year).sort((a,b) => a.period - b.period);
 
         empPayPeriods.forEach(p => {
             if (p.grossPay <= 0) return;
@@ -957,7 +956,7 @@ export function generate940Report(yearStr) {
             }
             ytdFUTAWages += wagesThisPeriod;
 
-            const payDate = new Date(p.payDate);
+            const payDate = fromStorageDate(p.payDate);
             const quarter = Math.floor(payDate.getMonth() / 3) + 1;
             quarterlyLiabilities[`q${quarter}`] += taxableFUTAWagesThisPeriod * futaRate;
         });
@@ -1033,7 +1032,7 @@ export function exportW2ReportToCSV(yearStr) {
     let csvContent = "Employee Name,Employee ID,Wages,Federal Tax,FICA,Medicare,SS Wages,State Tax,Local Tax\n";
 
     appData.employees.forEach(emp => {
-        const periodsInYear = (appData.payPeriods[emp.id] || []).filter(p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0);
+        const periodsInYear = (appData.payPeriods[emp.id] || []).filter(p => fromStorageDate(p.payDate).getFullYear() === year && p.grossPay > 0);
         if (periodsInYear.length === 0) return;
 
         let totals = { gross: 0, federal: 0, fica: 0, medicare: 0, state: 0, local: 0 };
@@ -1083,7 +1082,7 @@ export function export941ReportToCSV(periodStr) {
 
     const allPayPeriodsInQuarter = [].concat.apply([], Object.values(appData.payPeriods))
         .filter(p => {
-            const payDate = new Date(p.payDate);
+            const payDate = fromStorageDate(p.payDate);
             return payDate >= start && payDate <= end && p.grossPay > 0;
         });
 
@@ -1124,7 +1123,7 @@ export function export940ReportToCSV(yearStr) {
     const futaRate = appData.settings.futaRate / 100;
 
     const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods));
-    const periodsInYear = allPayPeriods.filter(p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0);
+    const periodsInYear = allPayPeriods.filter(p => fromStorageDate(p.payDate).getFullYear() === year && p.grossPay > 0);
 
     if (periodsInYear.length === 0) {
         alert('No payroll data for this year.');
@@ -1135,7 +1134,7 @@ export function export940ReportToCSV(yearStr) {
 
     appData.employees.forEach(emp => {
         let ytdFUTAWages = 0;
-        const empPayPeriods = (appData.payPeriods[emp.id] || []).filter(p => new Date(p.payDate).getFullYear() === year).sort((a,b) => a.period - b.period);
+        const empPayPeriods = (appData.payPeriods[emp.id] || []).filter(p => fromStorageDate(p.payDate).getFullYear() === year).sort((a,b) => a.period - b.period);
 
         empPayPeriods.forEach(p => {
             if (p.grossPay <= 0) return;
@@ -1187,7 +1186,7 @@ export function exportDateRangeEmployeeReportToCSV(startDateStr, endDateStr, emp
 
     employeesToReport.forEach(emp => {
         const periods = (appData.payPeriods[emp.id] || []).filter(p => {
-            const payDate = new Date(p.payDate);
+            const payDate = fromStorageDate(p.payDate);
             return payDate >= start && payDate <= end && p.grossPay > 0;
         });
 
@@ -1260,9 +1259,9 @@ export function exportDateRangeEmployerReportToCSV(startDateStr, endDateStr, emp
     const allPayPeriods = [].concat.apply([], employeeIdsToReport.map(id => appData.payPeriods[id] || []));
 
     const periodsInRange = allPayPeriods.filter(p => {
-        const payDate = new Date(p.payDate);
+        const payDate = fromStorageDate(p.payDate);
         return payDate >= start && payDate <= end && p.grossPay > 0;
-    }).sort((a,b) => new Date(a.payDate) - new Date(b.payDate));
+    }).sort((a,b) => fromStorageDate(a.payDate) - fromStorageDate(b.payDate));
 
     let csvContent = "Pay Date,Hours,Gross Pay,Employer FICA,Employer Medicare,SUTA,FUTA,Total Cost\n";
 
@@ -1347,9 +1346,9 @@ export function generateDateRangeEmployeeReport(startDateStr, endDateStr, employ
     const allPayPeriods = [].concat.apply([], employeeIdsToReport.map(id => appData.payPeriods[id] || []));
     
     const periodsInRange = allPayPeriods.filter(p => {
-        const payDate = new Date(p.payDate);
+        const payDate = fromStorageDate(p.payDate);
         return payDate >= start && payDate <= end && p.grossPay > 0;
-    }).sort((a,b) => new Date(a.payDate) - new Date(b.payDate));
+    }).sort((a,b) => fromStorageDate(a.payDate) - fromStorageDate(b.payDate));
 
     if (periodsInRange.length === 0) return `<div class="alert alert-info">No data for date range.</div>`;
     
@@ -1370,7 +1369,7 @@ export function generateDateRangeEmployeeReport(startDateStr, endDateStr, employ
         }, {});
 
         for (const [payDate, totals] of Object.entries(groupedByPayDate)) {
-            reportRows += `<tr><td>${payDate}</td><td>${totals.hours.toFixed(2)}</td><td>$${totals.gross.toFixed(2)}</td><td>$${totals.federal.toFixed(2)}</td><td>$${totals.state.toFixed(2)}</td><td>$${totals.local.toFixed(2)}</td><td>$${totals.fica.toFixed(2)}</td><td>$${totals.medicare.toFixed(2)}</td><td>$${totals.net.toFixed(2)}</td></tr>`;
+            reportRows += `<tr><td>${toDisplayDate(payDate)}</td><td>${totals.hours.toFixed(2)}</td><td>$${totals.gross.toFixed(2)}</td><td>$${totals.federal.toFixed(2)}</td><td>$${totals.state.toFixed(2)}</td><td>$${totals.local.toFixed(2)}</td><td>$${totals.fica.toFixed(2)}</td><td>$${totals.medicare.toFixed(2)}</td><td>$${totals.net.toFixed(2)}</td></tr>`;
             grandTotals.hours += totals.hours; grandTotals.gross += totals.gross; grandTotals.net += totals.net;
             grandTotals.federal += totals.federal; grandTotals.fica += totals.fica; grandTotals.medicare += totals.medicare;
             grandTotals.state += totals.state; grandTotals.local += totals.local;
@@ -1381,7 +1380,7 @@ export function generateDateRangeEmployeeReport(startDateStr, endDateStr, employ
             grandTotals.gross += period.grossPay; grandTotals.net += period.netPay; grandTotals.hours += totalHours;
             grandTotals.federal += period.taxes.federal; grandTotals.fica += period.taxes.fica; grandTotals.medicare += period.taxes.medicare;
             grandTotals.state += period.taxes.state; grandTotals.local += period.taxes.local;
-            reportRows += `<tr><td>${period.payDate}</td><td>${totalHours.toFixed(2)}</td><td>$${period.grossPay.toFixed(2)}</td><td>$${period.taxes.federal.toFixed(2)}</td><td>$${period.taxes.state.toFixed(2)}</td><td>$${period.taxes.local.toFixed(2)}</td><td>$${period.taxes.fica.toFixed(2)}</td><td>$${period.taxes.medicare.toFixed(2)}</td><td>$${period.netPay.toFixed(2)}</td></tr>`;
+            reportRows += `<tr><td>${toDisplayDate(period.payDate)}</td><td>${totalHours.toFixed(2)}</td><td>$${period.grossPay.toFixed(2)}</td><td>$${period.taxes.federal.toFixed(2)}</td><td>$${period.taxes.state.toFixed(2)}</td><td>$${period.taxes.local.toFixed(2)}</td><td>$${period.taxes.fica.toFixed(2)}</td><td>$${period.taxes.medicare.toFixed(2)}</td><td>$${period.netPay.toFixed(2)}</td></tr>`;
         });
     }
 
@@ -1403,9 +1402,9 @@ export function generateDateRangeEmployerReport(startDateStr, endDateStr, employ
     const allPayPeriods = [].concat.apply([], employeeIdsToReport.map(id => appData.payPeriods[id] || []));
 
     const periodsInRange = allPayPeriods.filter(p => {
-        const payDate = new Date(p.payDate);
+        const payDate = fromStorageDate(p.payDate);
         return payDate >= start && payDate <= end && p.grossPay > 0;
-    }).sort((a,b) => new Date(a.payDate) - new Date(b.payDate));
+    }).sort((a,b) => fromStorageDate(a.payDate) - fromStorageDate(b.payDate));
 
     if (periodsInRange.length === 0) return `<div class="alert alert-info">No data for date range.</div>`;
     
@@ -1429,7 +1428,7 @@ export function generateDateRangeEmployerReport(startDateStr, endDateStr, employ
 
         for (const [payDate, totals] of Object.entries(groupedByPayDate)) {
             const totalPeriodCost = totals.gross + totals.employerFica + totals.employerMedicare + totals.suta + totals.futa;
-            reportRows += `<tr><td>${payDate}</td><td>${totals.hours.toFixed(2)}</td><td>$${totals.gross.toFixed(2)}</td><td>$${totals.employerFica.toFixed(2)}</td><td>$${totals.employerMedicare.toFixed(2)}</td><td>$${totals.suta.toFixed(2)}</td><td>$${totals.futa.toFixed(2)}</td><td>$${totalPeriodCost.toFixed(2)}</td></tr>`;
+            reportRows += `<tr><td>${toDisplayDate(payDate)}</td><td>${totals.hours.toFixed(2)}</td><td>$${totals.gross.toFixed(2)}</td><td>$${totals.employerFica.toFixed(2)}</td><td>$${totals.employerMedicare.toFixed(2)}</td><td>$${totals.suta.toFixed(2)}</td><td>$${totals.futa.toFixed(2)}</td><td>$${totalPeriodCost.toFixed(2)}</td></tr>`;
             grandTotals.hours += totals.hours; grandTotals.gross += totals.gross; grandTotals.employerFica += totals.employerFica;
             grandTotals.employerMedicare += totals.employerMedicare; grandTotals.suta += totals.suta; grandTotals.futa += totals.futa;
             grandTotals.totalCost += totalPeriodCost;
@@ -1442,7 +1441,7 @@ export function generateDateRangeEmployerReport(startDateStr, endDateStr, employ
             const totalPeriodCost = period.grossPay + employerFica + employerMedicare + period.taxes.suta + period.taxes.futa;
             grandTotals.gross += period.grossPay; grandTotals.employerFica += employerFica; grandTotals.employerMedicare += employerMedicare;
             grandTotals.suta += period.taxes.suta; grandTotals.futa += period.taxes.futa; grandTotals.totalCost += totalPeriodCost; grandTotals.hours += totalHours;
-            reportRows += `<tr><td>${period.payDate}</td><td>${totalHours.toFixed(2)}</td><td>$${period.grossPay.toFixed(2)}</td><td>$${employerFica.toFixed(2)}</td><td>$${employerMedicare.toFixed(2)}</td><td>$${period.taxes.suta.toFixed(2)}</td><td>$${period.taxes.futa.toFixed(2)}</td><td>$${totalPeriodCost.toFixed(2)}</td></tr>`;
+            reportRows += `<tr><td>${toDisplayDate(period.payDate)}</td><td>${totalHours.toFixed(2)}</td><td>$${period.grossPay.toFixed(2)}</td><td>$${employerFica.toFixed(2)}</td><td>$${employerMedicare.toFixed(2)}</td><td>$${period.taxes.suta.toFixed(2)}</td><td>$${period.taxes.futa.toFixed(2)}</td><td>$${totalPeriodCost.toFixed(2)}</td></tr>`;
         });
     }
 

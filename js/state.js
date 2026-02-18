@@ -11,7 +11,7 @@ import * as db from './db.js';
 
 // --- CONFIGURATION & DEFAULT STATE ---
 
-export const CURRENT_VERSION = 8; // Incremented from 7 to 8
+export const CURRENT_VERSION = 9; // Incremented from 8 to 9
 
 // Constants used ONLY for defaultAppData initialization below.
 // All runtime code should read from appData.settings (the single source of truth).

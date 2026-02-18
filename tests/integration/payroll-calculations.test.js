@@ -396,9 +396,9 @@ describe('generateBasePayPeriods()', () => {
 
     const periods = generateBasePayPeriods();
     // First period: Jan 1-14, pay date should be Jan 19 (14 + 5)
-    expect(periods[0].startDate).toBe('1/1/2024');
-    expect(periods[0].endDate).toBe('1/14/2024');
-    expect(periods[0].payDate).toBe('1/19/2024');
+    expect(periods[0].startDate).toBe('2024-01-01');
+    expect(periods[0].endDate).toBe('2024-01-14');
+    expect(periods[0].payDate).toBe('2024-01-19');
   });
 });
 

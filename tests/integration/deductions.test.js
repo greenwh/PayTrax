@@ -234,7 +234,7 @@ describe('Employee Deductions', () => {
       ];
 
       // Pay date before second deduction was created
-      const result = calculateDeductions(employee, 2000, '3/1/2024');
+      const result = calculateDeductions(employee, 2000, '2024-03-01');
 
       // Only first deduction should apply
       expect(result.total).toBe(100);
@@ -248,7 +248,7 @@ describe('Employee Deductions', () => {
       ];
 
       // Pay date after all deductions created
-      const result = calculateDeductions(employee, 2000, '12/1/2024');
+      const result = calculateDeductions(employee, 2000, '2024-12-01');
 
       expect(result.total).toBe(150);
       expect(result.deductions.length).toBe(2);
@@ -259,7 +259,7 @@ describe('Employee Deductions', () => {
         { id: 'ded1', name: '401k', amount: 100, type: 'fixed' } // No createdDate
       ];
 
-      const result = calculateDeductions(employee, 2000, '1/1/2024');
+      const result = calculateDeductions(employee, 2000, '2024-01-01');
 
       expect(result.total).toBe(100);
     });

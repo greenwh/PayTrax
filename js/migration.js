@@ -159,6 +159,60 @@ function migrateToV8(data) {
 }
 
 /**
+ * Migrates from version 8 to version 9.
+ * - Converts all date strings from M/D/YYYY or MM/DD/YYYY to YYYY-MM-DD storage format
+ * - Pay period dates: startDate, endDate, payDate
+ * - Bank register dates: date
+ * - Deduction createdDate: already YYYY-MM-DD, no change needed
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV9(data) {
+    console.log("Running migration to v9...");
+
+    /**
+     * Converts a legacy M/D/YYYY or MM/DD/YYYY string to YYYY-MM-DD.
+     * Returns the string as-is if already in YYYY-MM-DD format or unrecognized.
+     */
+    function convertDate(dateStr) {
+        if (!dateStr || typeof dateStr !== 'string') return dateStr;
+        // Already YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+        // M/D/YYYY or MM/DD/YYYY
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            const month = parts[0].padStart(2, '0');
+            const day = parts[1].padStart(2, '0');
+            const year = parts[2];
+            return `${year}-${month}-${day}`;
+        }
+        return dateStr;
+    }
+
+    // Convert pay period dates
+    if (data.payPeriods && typeof data.payPeriods === 'object') {
+        for (const employeeId of Object.keys(data.payPeriods)) {
+            const periods = data.payPeriods[employeeId];
+            if (Array.isArray(periods)) {
+                periods.forEach(period => {
+                    if (period.startDate) period.startDate = convertDate(period.startDate);
+                    if (period.endDate) period.endDate = convertDate(period.endDate);
+                    if (period.payDate) period.payDate = convertDate(period.payDate);
+                });
+            }
+        }
+    }
+
+    // Convert bank register dates
+    if (data.bankRegister && Array.isArray(data.bankRegister)) {
+        data.bankRegister.forEach(transaction => {
+            if (transaction.date) transaction.date = convertDate(transaction.date);
+        });
+    }
+
+    data.version = 9; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -189,6 +243,9 @@ export function migrateData(data) {
             // Fall-through is intentional
         case 7:
             migrateToV8(data);
+            // Fall-through is intentional
+        case 8:
+            migrateToV9(data);
             // Fall-through is intentional for future migrations
             break;
     }

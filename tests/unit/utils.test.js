@@ -1,32 +1,95 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { formatDate, parseDateInput } from '../../js/utils.js';
+import { formatDate, parseDateInput, toStorageDate, fromStorageDate, toDisplayDate, fromLegacyDate } from '../../js/utils.js';
 import { appData } from '../../js/state.js';
 
 describe('utils.js', () => {
-  describe('formatDate()', () => {
-    it('should format a Date object to MM/DD/YYYY', () => {
+  describe('formatDate() / toStorageDate()', () => {
+    it('should format a Date object to YYYY-MM-DD', () => {
       const date = new Date('2024-03-15T12:00:00Z');
-      expect(formatDate(date)).toBe('3/15/2024');
+      expect(formatDate(date)).toBe('2024-03-15');
     });
 
-    it('should handle single-digit months and days', () => {
+    it('should zero-pad single-digit months and days', () => {
       const date = new Date('2024-01-05T12:00:00Z');
-      expect(formatDate(date)).toBe('1/5/2024');
+      expect(formatDate(date)).toBe('2024-01-05');
     });
 
     it('should handle December 31st', () => {
       const date = new Date('2024-12-31T12:00:00Z');
-      expect(formatDate(date)).toBe('12/31/2024');
+      expect(formatDate(date)).toBe('2024-12-31');
     });
 
     it('should handle January 1st', () => {
       const date = new Date('2024-01-01T12:00:00Z');
-      expect(formatDate(date)).toBe('1/1/2024');
+      expect(formatDate(date)).toBe('2024-01-01');
     });
 
     it('should use UTC methods to avoid timezone issues', () => {
       const date = new Date(Date.UTC(2024, 5, 15)); // June 15, 2024 UTC
-      expect(formatDate(date)).toBe('6/15/2024');
+      expect(formatDate(date)).toBe('2024-06-15');
+    });
+
+    it('should be aliased as toStorageDate', () => {
+      const date = new Date('2024-07-04T12:00:00Z');
+      expect(toStorageDate(date)).toBe('2024-07-04');
+      expect(toStorageDate(date)).toBe(formatDate(date));
+    });
+  });
+
+  describe('fromStorageDate()', () => {
+    it('should parse YYYY-MM-DD to local noon Date', () => {
+      const date = fromStorageDate('2024-03-15');
+      expect(date.getFullYear()).toBe(2024);
+      expect(date.getMonth()).toBe(2); // March = 2
+      expect(date.getDate()).toBe(15);
+      expect(date.getHours()).toBe(12); // noon local
+    });
+
+    it('should return invalid date for null/undefined', () => {
+      expect(isNaN(fromStorageDate(null))).toBe(true);
+      expect(isNaN(fromStorageDate(undefined))).toBe(true);
+    });
+  });
+
+  describe('toDisplayDate()', () => {
+    it('should convert YYYY-MM-DD to M/D/YYYY', () => {
+      expect(toDisplayDate('2024-03-15')).toBe('3/15/2024');
+    });
+
+    it('should strip leading zeros', () => {
+      expect(toDisplayDate('2024-01-05')).toBe('1/5/2024');
+    });
+
+    it('should handle December 31st', () => {
+      expect(toDisplayDate('2024-12-31')).toBe('12/31/2024');
+    });
+
+    it('should return empty string for null/undefined', () => {
+      expect(toDisplayDate(null)).toBe('');
+      expect(toDisplayDate(undefined)).toBe('');
+    });
+
+    it('should return original string for non-YYYY-MM-DD format', () => {
+      expect(toDisplayDate('not a date')).toBe('not a date');
+    });
+  });
+
+  describe('fromLegacyDate()', () => {
+    it('should convert M/D/YYYY to YYYY-MM-DD', () => {
+      expect(fromLegacyDate('1/5/2024')).toBe('2024-01-05');
+    });
+
+    it('should convert MM/DD/YYYY to YYYY-MM-DD', () => {
+      expect(fromLegacyDate('03/15/2024')).toBe('2024-03-15');
+    });
+
+    it('should pass through YYYY-MM-DD unchanged', () => {
+      expect(fromLegacyDate('2024-03-15')).toBe('2024-03-15');
+    });
+
+    it('should return null/undefined as-is', () => {
+      expect(fromLegacyDate(null)).toBe(null);
+      expect(fromLegacyDate(undefined)).toBe(undefined);
     });
   });
 

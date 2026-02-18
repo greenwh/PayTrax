@@ -5,15 +5,14 @@ import testDataV6 from '../fixtures/test-data-v6.json';
 
 describe('migration.js', () => {
   describe('migrateData() - Full Migration Chain', () => {
-    it('should migrate v1 data to v8', () => {
+    it('should migrate v1 data to v9', () => {
       // Create a deep copy to avoid mutating the fixture
       const v1Data = JSON.parse(JSON.stringify(testDataV1));
 
-      // Migrate from v1 to v7
       const migrated = migrateData(v1Data);
 
-      // Should be at v8
-      expect(migrated.version).toBe(8);
+      // Should be at v9
+      expect(migrated.version).toBe(9);
 
       // v2 additions
       expect(migrated.settings.employeeIdPrefix).toBeDefined();
@@ -48,14 +47,13 @@ describe('migration.js', () => {
       expect(migrated.settings.sutaWageBase).toBe(25000);
     });
 
-    it('should migrate v6 data to v8', () => {
+    it('should migrate v6 data to v9', () => {
       const v6Data = JSON.parse(JSON.stringify(testDataV6));
 
-      // Migrate from v6 to v8
       const migrated = migrateData(v6Data);
 
-      // Should be at v8
-      expect(migrated.version).toBe(8);
+      // Should be at v9
+      expect(migrated.version).toBe(9);
 
       // v7 additions - autoSubtraction
       expect(migrated.settings.autoSubtraction).toBe(true);
@@ -66,7 +64,7 @@ describe('migration.js', () => {
       expect(migrated.employees[0].deductions[1].createdDate).toBe('2000-01-01');
     });
 
-    it('should migrate v7 data to v8 adding sutaWageBase', () => {
+    it('should migrate v7 data to v9 adding sutaWageBase and converting dates', () => {
       const v7Data = {
         version: 7,
         settings: { companyName: 'Test', autoSubtraction: false },
@@ -77,24 +75,50 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v7Data)));
 
-      expect(migrated.version).toBe(8);
+      expect(migrated.version).toBe(9);
       expect(migrated.settings.autoSubtraction).toBe(false); // Should not be changed
       expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
     });
 
-    it('should not modify data already at v8', () => {
+    it('should migrate v8 data to v9 converting date formats', () => {
       const v8Data = {
         version: 8,
         settings: { companyName: 'Test', autoSubtraction: false, sutaWageBase: 30000 },
+        employees: [],
+        payPeriods: {
+          'emp_1': [
+            { period: 1, startDate: '1/1/2024', endDate: '1/14/2024', payDate: '1/19/2024', hours: {}, grossPay: 0 }
+          ]
+        },
+        bankRegister: [
+          { id: 'trans_1', date: '01/15/2024', description: 'Test', debit: 100, credit: 0, reconciled: false }
+        ]
+      };
+
+      const migrated = migrateData(JSON.parse(JSON.stringify(v8Data)));
+
+      expect(migrated.version).toBe(9);
+      expect(migrated.settings.sutaWageBase).toBe(30000); // Should not be changed
+
+      // v9: dates converted to YYYY-MM-DD
+      expect(migrated.payPeriods['emp_1'][0].startDate).toBe('2024-01-01');
+      expect(migrated.payPeriods['emp_1'][0].endDate).toBe('2024-01-14');
+      expect(migrated.payPeriods['emp_1'][0].payDate).toBe('2024-01-19');
+      expect(migrated.bankRegister[0].date).toBe('2024-01-15');
+    });
+
+    it('should not modify data already at v9', () => {
+      const v9Data = {
+        version: 9,
+        settings: { companyName: 'Test', autoSubtraction: true, sutaWageBase: 25000 },
         employees: [],
         payPeriods: {},
         bankRegister: []
       };
 
-      const migrated = migrateData(JSON.parse(JSON.stringify(v8Data)));
+      const migrated = migrateData(JSON.parse(JSON.stringify(v9Data)));
 
-      expect(migrated.version).toBe(8);
-      expect(migrated.settings.sutaWageBase).toBe(30000); // Should not be changed
+      expect(migrated.version).toBe(9);
     });
   });
 
@@ -409,7 +433,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(unversionedData);
 
-      expect(migrated.version).toBe(8);
+      expect(migrated.version).toBe(9);
       expect(migrated.settings.employeeIdPrefix).toBeDefined(); // v2 addition
       expect(migrated.settings.autoSubtraction).toBeDefined(); // v7 addition
       expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
@@ -427,7 +451,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v1Data);
 
       expect(migrated.employees).toEqual([]);
-      expect(migrated.version).toBe(8);
+      expect(migrated.version).toBe(9);
     });
 
     it('should handle empty bank register', () => {
@@ -442,7 +466,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v3Data);
 
       expect(migrated.bankRegister).toEqual([]);
-      expect(migrated.version).toBe(8);
+      expect(migrated.version).toBe(9);
     });
 
     it('should preserve all existing data during migration', () => {

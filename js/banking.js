@@ -10,6 +10,7 @@
 
 import { appData, saveData, saveDataImmediate } from './state.js';
 import { generateBasePayPeriods } from './logic.js';
+import { fromStorageDate, toDisplayDate } from './utils.js';
 
 // --- EVENT HANDLER FUNCTIONS (Internal to this module) ---
 
@@ -78,10 +79,10 @@ function handlePurgeConfirm() {
     if (confirm(`Are you sure you want to permanently delete ${count} reconciled transaction(s) on or before ${cutoffDate}? This cannot be undone.`)) {
         // Calculate the opening balance before purging for the message
         const cutoffDateObj = new Date(cutoffDate + 'T23:59:59');
-        const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const sortedRegister = [...appData.bankRegister].sort((a, b) => fromStorageDate(a.date) - fromStorageDate(b.date));
         let openingBalance = 0;
         for (const t of sortedRegister) {
-            if (new Date(t.date) <= cutoffDateObj) {
+            if (fromStorageDate(t.date) <= cutoffDateObj) {
                 openingBalance += t.credit - t.debit;
             } else {
                 break;
@@ -109,11 +110,11 @@ function filterTransactions(transactions, filters) {
 
     if (filters.startDate) {
         const start = new Date(filters.startDate + 'T00:00:00');
-        filtered = filtered.filter(t => new Date(t.date) >= start);
+        filtered = filtered.filter(t => fromStorageDate(t.date) >= start);
     }
     if (filters.endDate) {
         const end = new Date(filters.endDate + 'T23:59:59');
-        filtered = filtered.filter(t => new Date(t.date) <= end);
+        filtered = filtered.filter(t => fromStorageDate(t.date) <= end);
     }
     if (filters.description) {
         const searchTerm = filters.description.toLowerCase();
@@ -130,13 +131,11 @@ function filterTransactions(transactions, filters) {
 }
 
 function addTransactionFromForm() {
-    const date = document.getElementById('transDate').value;
+    const date = document.getElementById('transDate').value; // Already YYYY-MM-DD from HTML date input
     const desc = document.getElementById('transDesc').value;
     const type = document.getElementById('transType').value;
     const amount = parseFloat(document.getElementById('transAmount').value);
-    const dateParts = date.split('-');
-    const formattedDate = `${dateParts[1]}/${dateParts[2]}/${dateParts[0]}`;
-    addTransaction(formattedDate, desc, type, amount);
+    addTransaction(date, desc, type, amount);
 }
 
 export function addTransaction(date, description, type, amount, id = null, silent = false, reconciled = false) {
@@ -166,7 +165,7 @@ function enableEditMode(transId) {
     if (!transaction) return;
 
     const tbody = document.getElementById('bankRegisterBody');
-    const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sortedRegister = [...appData.bankRegister].sort((a, b) => fromStorageDate(a.date) - fromStorageDate(b.date));
 
     const filters = {
         startDate: document.getElementById('filterStartDate').value,
@@ -192,9 +191,7 @@ function enableEditMode(transId) {
 
         if (trans.id === transId) {
             // Edit mode - build with safe DOM methods
-            const dateFormatted = trans.date.includes('/') ? trans.date.split('/') : ['', '', ''];
-            const dateValue = dateFormatted.length === 3 ?
-                `${dateFormatted[2]}-${dateFormatted[0].padStart(2, '0')}-${dateFormatted[1].padStart(2, '0')}` : '';
+            const dateValue = trans.date; // Already YYYY-MM-DD storage format
 
             const isDebit = trans.debit > 0;
             const amount = isDebit ? trans.debit : trans.credit;
@@ -267,7 +264,7 @@ function enableEditMode(transId) {
         } else {
             // Normal display mode - build with safe DOM methods
             const dateTd = document.createElement('td');
-            dateTd.textContent = trans.date;
+            dateTd.textContent = toDisplayDate(trans.date);
 
             const descTd = document.createElement('td');
             descTd.textContent = trans.description;
@@ -327,10 +324,7 @@ function saveTransactionEdit(transId) {
         return;
     }
 
-    const dateParts = dateInput.split('-');
-    const formattedDate = `${dateParts[1]}/${dateParts[2]}/${dateParts[0]}`;
-
-    transaction.date = formattedDate;
+    transaction.date = dateInput; // HTML date input is already YYYY-MM-DD
     transaction.description = descInput;
     transaction.debit = typeInput === 'debit' ? amountInput : 0;
     transaction.credit = typeInput === 'credit' ? amountInput : 0;
@@ -344,11 +338,11 @@ function purgeTransactions(cutoffDateStr) {
     const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
 
     // Sort chronologically to calculate running balance
-    const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sortedRegister = [...appData.bankRegister].sort((a, b) => fromStorageDate(a.date) - fromStorageDate(b.date));
 
     // Find transactions to purge
     const txsToPurge = sortedRegister.filter(t =>
-        t.reconciled && new Date(t.date) <= cutoffDate
+        t.reconciled && fromStorageDate(t.date) <= cutoffDate
     );
 
     if (txsToPurge.length === 0) {
@@ -358,7 +352,7 @@ function purgeTransactions(cutoffDateStr) {
     // Calculate running balance up through and including purge date
     let openingBalance = 0;
     for (const t of sortedRegister) {
-        if (new Date(t.date) <= cutoffDate) {
+        if (fromStorageDate(t.date) <= cutoffDate) {
             openingBalance += t.credit - t.debit;
         } else {
             break;
@@ -368,14 +362,14 @@ function purgeTransactions(cutoffDateStr) {
     // Calculate date for opening balance (one day after purge date)
     const openingBalanceDate = new Date(cutoffDate);
     openingBalanceDate.setDate(openingBalanceDate.getDate() + 1);
+    const year = openingBalanceDate.getFullYear();
     const month = String(openingBalanceDate.getMonth() + 1).padStart(2, '0');
     const day = String(openingBalanceDate.getDate()).padStart(2, '0');
-    const year = openingBalanceDate.getFullYear();
-    const openingBalanceDateStr = `${month}/${day}/${year}`;
+    const openingBalanceDateStr = `${year}-${month}-${day}`;
 
     // Remove only reconciled transactions on or before cutoff date
     appData.bankRegister = appData.bankRegister.filter(t => {
-        const transDate = new Date(t.date);
+        const transDate = fromStorageDate(t.date);
         // Keep transaction if: it's after cutoff OR it's not reconciled
         return transDate > cutoffDate || t.reconciled === false;
     });
@@ -398,7 +392,7 @@ function purgeTransactions(cutoffDateStr) {
 
 function getPurgeableCount(cutoffDateStr) {
     const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
-    return appData.bankRegister.filter(t => new Date(t.date) <= cutoffDate && t.reconciled === true).length;
+    return appData.bankRegister.filter(t => fromStorageDate(t.date) <= cutoffDate && t.reconciled === true).length;
 }
 
 function getBankProjections() {
@@ -423,7 +417,7 @@ function getBankProjections() {
     let nextMonthPeriods = 0;
 
     basePeriods.forEach(period => {
-        const payDate = new Date(period.payDate);
+        const payDate = fromStorageDate(period.payDate);
         if (payDate.getMonth() === currentMonth && payDate.getFullYear() === currentYear && payDate >= currentDate) {
             thisMonthPeriods++;
         }
@@ -491,7 +485,7 @@ export function displayRegister() {
         status: document.getElementById('filterStatus').value,
     };
 
-    const sortedRegister = [...appData.bankRegister].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sortedRegister = [...appData.bankRegister].sort((a, b) => fromStorageDate(a.date) - fromStorageDate(b.date));
     const transactionsToDisplay = filterTransactions(sortedRegister, filters);
 
     let runningBalance = 0;
@@ -509,7 +503,7 @@ export function displayRegister() {
 
         // Build cells using safe DOM methods to prevent XSS from imported descriptions
         const dateTd = document.createElement('td');
-        dateTd.textContent = trans.date;
+        dateTd.textContent = toDisplayDate(trans.date);
 
         const descTd = document.createElement('td');
         descTd.textContent = trans.description;
@@ -688,28 +682,25 @@ function parseTransactionFromCsv(row, format) {
 function normalizeDate(dateStr) {
     if (!dateStr) return null;
 
-    // Try various date formats
-    let parsedDate;
-
-    // Format: MM/DD/YYYY or M/D/YYYY
+    // Format: MM/DD/YYYY or M/D/YYYY → convert to YYYY-MM-DD
     if (dateStr.includes('/')) {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
             const month = parts[0].padStart(2, '0');
             const day = parts[1].padStart(2, '0');
             const year = parts[2];
-            return `${month}/${day}/${year}`;
+            return `${year}-${month}-${day}`;
         }
     }
 
-    // Format: YYYY-MM-DD
+    // Format: YYYY-MM-DD → already correct
     if (dateStr.includes('-')) {
         const parts = dateStr.split('-');
         if (parts.length === 3) {
             const year = parts[0];
             const month = parts[1].padStart(2, '0');
             const day = parts[2].padStart(2, '0');
-            return `${month}/${day}/${year}`;
+            return `${year}-${month}-${day}`;
         }
     }
 
@@ -718,11 +709,11 @@ function normalizeDate(dateStr) {
 
 function fuzzyMatchTransaction(newTrans) {
     // Fuzzy match: ±2 days and ±$1
-    const newDate = new Date(newTrans.date);
+    const newDate = fromStorageDate(newTrans.date);
     const newAmount = newTrans.debit > 0 ? newTrans.debit : newTrans.credit;
 
     return appData.bankRegister.find(existing => {
-        const existingDate = new Date(existing.date);
+        const existingDate = fromStorageDate(existing.date);
         const existingAmount = existing.debit > 0 ? existing.debit : existing.credit;
 
         // Check date difference (±2 days = 2 * 24 * 60 * 60 * 1000 milliseconds)

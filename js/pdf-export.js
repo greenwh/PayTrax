@@ -9,6 +9,7 @@
 // js/pdf-export.js - PDF export functionality using jsPDF
 
 import { appData } from './state.js';
+import { fromStorageDate, toDisplayDate } from './utils.js';
 
 /**
  * Exports pay stub to PDF
@@ -66,8 +67,8 @@ export function exportPayStubToPDF(employeeId, periodNum) {
 
     const employeeInfoY = employee.address ? 70 : 63;
     doc.text(`Employee ID: ${employee.idNumber}`, 20, employeeInfoY);
-    doc.text(`Pay Period: ${period.startDate} - ${period.endDate}`, 20, employeeInfoY + 7);
-    doc.text(`Pay Date: ${period.payDate}`, 20, employeeInfoY + 14);
+    doc.text(`Pay Period: ${toDisplayDate(period.startDate)} - ${toDisplayDate(period.endDate)}`, 20, employeeInfoY + 7);
+    doc.text(`Pay Date: ${toDisplayDate(period.payDate)}`, 20, employeeInfoY + 14);
 
     // Calculate YTD earnings
     const ytdEarnings = calculateYTDEarnings(employeeId, periodNum);
@@ -276,7 +277,7 @@ export function exportW2ReportToPDF(yearStr) {
 
     appData.employees.forEach(emp => {
         const periodsInYear = (appData.payPeriods[emp.id] || []).filter(
-            p => new Date(p.payDate).getFullYear() === year && p.grossPay > 0
+            p => fromStorageDate(p.payDate).getFullYear() === year && p.grossPay > 0
         );
 
         if (periodsInYear.length === 0) return;
@@ -446,7 +447,7 @@ export function exportCustomReportToPDF(startDate, endDate, employeeId, reportTy
 
     employeesToReport.forEach(emp => {
         const periods = (appData.payPeriods[emp.id] || []).filter(p => {
-            const payDate = new Date(p.payDate);
+            const payDate = fromStorageDate(p.payDate);
             return payDate >= start && payDate <= end && p.grossPay > 0;
         });
 
