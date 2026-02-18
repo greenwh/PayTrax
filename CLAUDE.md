@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Key Characteristics:**
 - Vanilla JavaScript (no frameworks, no TypeScript, no build tools)
-- ~4,000+ lines of code
+- ~4,500+ lines of code across 12 ES6 modules
 - IndexedDB for persistent storage with localStorage fallback
 - Progressive Web App (PWA) with offline support via Service Worker
 - Privacy-first: 100% client-side, no data leaves the browser
@@ -69,7 +69,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - File: migration.js
     - Risk: Breaking backward compatibility with older data versions
     - Test: Load v1-v6 test data files, verify migrations apply correctly
-    - Verify: appData.version updates to 7 after load
+    - Verify: appData.version updates to 9 after load
   4. Bank Register Synchronization (MEDIUM)
     - File: banking.js, logic.js
     - Risk: Pay period changes might not update bank register transactions
@@ -107,7 +107,7 @@ python -m http.server 8000
 
 **Test Framework:** Vitest with browser mode (Playwright)
 **Coverage Provider:** Istanbul (works with browser mode)
-**Test Files:** 285 tests across utils, validation, db, migration, and integration modules
+**Test Files:** 301 tests across utils, validation, db, migration, and integration modules
 
 **Running Tests:**
 ```bash
@@ -147,15 +147,18 @@ All application code is in `/js/` directory using ES6 module imports. Each modul
 
 ```
 js/main.js        → App orchestrator, event handlers, tab management
-js/state.js       → Single source of truth (appData object), IndexedDB persistence
-js/logic.js       → All payroll calculations, employee management, tax reporting, CSV exports
+js/state.js       → Single source of truth (appData object), debounced persistence
+js/logic.js       → Core payroll calculations (pay periods, tax math, running remainder)
+js/employees.js   → Employee CRUD and deduction management (NEW - split from logic.js)
+js/reports.js     → Tax reports (W-2, 941, 940), date range reports, CSV exports (NEW - split from logic.js)
 js/ui.js          → DOM manipulation, view rendering, form management
-js/banking.js     → Bank register, reconciliation, filtering, CSV export
+js/banking.js     → Bank register, reconciliation, filtering, CSV import/export
 js/db.js          → IndexedDB API wrapper
 js/data-io.js     → JSON import/export functionality
-js/migration.js   → Data versioning (v1→v5 backward compatibility)
-js/utils.js       → Helper functions (date formatting, parsing)
-js/validation.js  → Comprehensive data validation module (NEW in v5)
+js/migration.js   → Data versioning (v1→v9 backward compatibility)
+js/utils.js       → Date utilities (formatDate, fromStorageDate, toDisplayDate, fromLegacyDate, parseDateInput)
+js/validation.js  → Comprehensive data validation module
+js/pdf-export.js  → PDF generation for pay stubs and reports (jsPDF)
 ```
 
 ### State Management Pattern
@@ -163,14 +166,14 @@ js/validation.js  → Comprehensive data validation module (NEW in v5)
 **Single State Object (appData)** is the single source of truth:
 - Located in `state.js`
 - Contains: settings, employees, payPeriods, bankRegister
-- Persisted to IndexedDB via `saveData()` in state.js
+- Persisted to IndexedDB via debounced `saveData()` or immediate `saveDataImmediate()` in state.js
 - Loaded on startup via `loadData()`
 - Never mutated directly—always through logic.js or ui.js functions
 
 **Data Structure:**
 ```javascript
 appData = {
-  version: 8,  // Updated from 7 to 8
+  version: 9,  // Updated from 8 to 9
   settings: {
     companyName, taxYear, payFrequency, firstPayPeriodStartDate,
     socialSecurity, medicare, sutaRate, futaRate,
@@ -230,13 +233,13 @@ Single module import triggers entire app initialization. Service Worker is regis
 | Bank Register | `banking.js` | `addTransaction()`, `reconcileTransaction()`, `filterTransactions()`, CSV export |
 | Import/Export | `data-io.js` | `importData()`, `exportData()` (with version checking) |
 | **Data Validation** | `validation.js` | `validateEmployee()`, `validateHours()`, `validateSettings()`, `validateTransaction()`, `validateDeduction()` **NEW v5** |
-| Backward Compatibility | `migration.js` | Handles v1→v8 data migration sequentially |
+| Backward Compatibility | `migration.js` | Handles v1→v9 data migration sequentially |
 
 ## Data Versioning & Migration
 
-**Current Version:** 8
+**Current Version:** 9
 
-Old backups are automatically migrated when imported. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v8 transformations are applied.
+Old backups are automatically migrated when imported. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v9 transformations are applied.
 
 **Version History:**
 - v1 → Initial structure
@@ -247,6 +250,7 @@ Old backups are automatically migrated when imported. The migration flow in `mig
 - v6 → Added createdDate to deductions for retroactive filtering
 - v7 → Added autoSubtraction setting for bank register toggle
 - v8 → Added sutaWageBase setting ($25,000 OK default), wage base cap enforcement at calculation time
+- v9 → Standardized all dates to YYYY-MM-DD storage format (converted from M/D/YYYY)
 
 ## PWA & Offline Support
 
@@ -296,7 +300,7 @@ PayTrax now has comprehensive automated testing with Vitest. Run tests before an
 
 **Quick Start:**
 ```bash
-npm test              # Run all tests (285 tests pass)
+npm test              # Run all tests (301 tests pass)
 npm run test:coverage # Check coverage and identify gaps
 ```
 
@@ -357,10 +361,23 @@ For UI interactions and visual verification:
 - **Rounding Method:** Uses standard currency rounding (`Math.round(x * 100) / 100`) NOT banker's rounding
 - See `logic.js::calculatePay()` and `logic.js::recalculateAllPeriodsForEmployee()` for implementation
 
+### Date Format Convention (v9+)
+- **Storage format:** All dates stored as `YYYY-MM-DD` strings (ISO 8601)
+- **Display format:** Converted to `M/D/YYYY` for UI display via `toDisplayDate()`
+- **Parsing:** Use `fromStorageDate(dateStr)` to convert storage dates to Date objects (uses noon local time to avoid timezone day-boundary issues)
+- **Legacy migration:** v9 migration converts old `M/D/YYYY` and `MM/DD/YYYY` formats to `YYYY-MM-DD`
+- **HTML date inputs:** Native `<input type="date">` returns `YYYY-MM-DD` — store directly, no conversion needed
+
 ### Pay Period Generation
 - Generated from `appData.settings.firstPayPeriodStartDate` and `payFrequency`
 - Must handle fiscal year vs calendar year appropriately
 - See `logic.js::generatePayPeriods()` for algorithm
+
+### Save Persistence (v9+)
+- **Debounced save:** `saveData()` coalesces rapid saves with 300ms debounce
+- **Immediate save:** `saveDataImmediate()` for critical operations (employee changes, settings, purge)
+- **Dirty tracking:** `isDirty()` checks for unsaved changes; `beforeunload` warns users
+- **Data validation:** `loadData()` validates structural integrity on startup
 
 ### Git & Deployment
 - Clean git history, ready for GitHub Pages
