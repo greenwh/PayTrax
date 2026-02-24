@@ -9,6 +9,23 @@
 import { appData } from './state.js';
 
 /**
+ * Returns quarter info for a given date.
+ * @param {Date} date
+ * @returns {{ quarter: string, quarterNum: number, start: string, end: string, year: number }}
+ */
+export function getQuarterForDate(date) {
+    const month = date.getMonth(); // 0-11
+    const year = date.getFullYear();
+    const quarterNum = Math.floor(month / 3) + 1;
+    const startMonth = (quarterNum - 1) * 3;
+    const endMonth = startMonth + 2;
+    const start = `${year}-${String(startMonth + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, endMonth + 1, 0).getDate();
+    const end = `${year}-${String(endMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    return { quarter: `Q${quarterNum}`, quarterNum, start, end, year };
+}
+
+/**
  * Formats a Date object into a "YYYY-MM-DD" storage string.
  * This is the canonical storage format for all dates in PayTrax.
  * @param {Date} date - The date to format.

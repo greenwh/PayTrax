@@ -28,6 +28,9 @@ function handleTabClick(event) {
     const tabButton = event.target.closest('.nav-tab');
     if (tabButton && tabButton.dataset.tab) {
         ui.showTab(tabButton.dataset.tab, tabButton);
+        if (tabButton.dataset.tab === 'dashboard') {
+            ui.refreshQuarterlyEarningsWidget();
+        }
     }
 }
 
@@ -44,7 +47,7 @@ async function handleSettingsChange() {
     }
 
     logic.generatePayPeriods();
-    handleEmployeeChange(); // Refresh dropdowns and data
+    handleEmployeeChange(); // Refresh dropdowns and data (also refreshes quarterly widget)
     await saveDataImmediate();
 }
 
@@ -56,6 +59,7 @@ function handleEmployeeChange() {
     ui.populatePeriodDropdown(employeeId);
     ui.displayPayPeriods(employeeId);
     handlePeriodChange();
+    ui.refreshQuarterlyEarningsWidget();
 }
 
 /**
@@ -97,6 +101,7 @@ function handleHoursChange() {
     ui.displayPayPeriods(employeeId);
     banking.updateBankProjectionsUI(); // Delegated to banking module
     banking.displayRegister(); // Delegated to banking module
+    ui.refreshQuarterlyEarningsWidget();
     saveData();
     const currentBalance = banking.getCurrentBankBalance(); // Delegated
     if (currentBalance < 0) {

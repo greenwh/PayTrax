@@ -238,6 +238,11 @@ export function validateSettings(settings) {
     const addMedicareRateError = validateNumber(settings.additionalMedicareRate, 'Additional Medicare Rate', 0, 5, true);
     if (addMedicareRateError) errors.push(addMedicareRateError);
 
+    const qetError = validateNumber(settings.quarterlyEarningsTarget, 'Quarterly Earnings Target', 0, 100000, false);
+    if (qetError) errors.push(qetError);
+    const minHoursError = validateNumber(settings.minimumWeeklyHours, 'Minimum Weekly Hours', 0, 40, false);
+    if (minHoursError) errors.push(minHoursError);
+
     return errors;
 }
 

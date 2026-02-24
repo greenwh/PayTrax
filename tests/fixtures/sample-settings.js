@@ -42,6 +42,10 @@ export function createTestSettings(overrides = {}) {
     // Auto bank subtraction (v7)
     autoSubtraction: true,
 
+    // Quarterly earnings target (v10)
+    quarterlyEarningsTarget: 1890,
+    minimumWeeklyHours: 20,
+
     ...overrides
   };
 }
@@ -93,7 +97,7 @@ export function createMonthlySettings(overrides = {}) {
  */
 export function createTestAppData(settingsOverrides = {}, employees = []) {
   return {
-    version: 9,
+    version: 10,
     settings: createTestSettings(settingsOverrides),
     employees: employees,
     payPeriods: {},

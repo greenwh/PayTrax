@@ -8,7 +8,7 @@
 */
 import { appData } from './state.js';
 import * as logic from './logic.js';
-import { formatDate, parseDateInput, fromStorageDate, toDisplayDate } from './utils.js';
+import { formatDate, parseDateInput, fromStorageDate, toDisplayDate, getQuarterForDate } from './utils.js';
 
 // --- UI & TAB MANAGEMENT ---
 
@@ -57,6 +57,8 @@ export function displaySettings() {
     document.getElementById('stateTaxFrequency').value = settings.taxFrequencies.state;
     document.getElementById('localTaxFrequency').value = settings.taxFrequencies.local;
     document.getElementById('autoSubtraction').checked = settings.autoSubtraction !== false;
+    document.getElementById('quarterlyEarningsTarget').value = settings.quarterlyEarningsTarget;
+    document.getElementById('minimumWeeklyHours').value = settings.minimumWeeklyHours;
 }
 
 /**
@@ -511,4 +513,165 @@ export function printPayStub() {
     </style></head><body><div class="paystub">${printContent}</div></body></html>`);
     printWindow.document.close();
     printWindow.print();
+}
+
+// --- QUARTERLY EARNINGS TARGET WIDGET ---
+
+/**
+ * Renders the quarterly earnings widget on the dashboard.
+ * Shows per-employee detail when an employee is selected,
+ * or all-employees summary when none is selected.
+ */
+export function refreshQuarterlyEarningsWidget() {
+    const widget = document.getElementById('quarterlyEarningsWidget');
+    if (!widget) return;
+
+    const target = appData.settings.quarterlyEarningsTarget || 0;
+
+    // Hide widget if target is 0 (feature disabled)
+    if (target === 0) {
+        widget.style.display = 'none';
+        return;
+    }
+
+    // Show widget
+    widget.style.display = 'block';
+
+    const employeeId = document.getElementById('currentEmployee')?.value;
+
+    if (!appData.employees || appData.employees.length === 0) {
+        document.getElementById('qetHeader').textContent = 'Quarterly Earnings Target';
+        document.getElementById('qetBody').innerHTML =
+            '<p style="text-align:center; font-style:italic; color:#6c757d;">Add an employee to see quarterly earnings tracking.</p>';
+        return;
+    }
+
+    if (employeeId) {
+        // Per-employee detail view
+        const status = logic.calculateQuarterlyEarningsStatus(employeeId);
+        renderQuarterlyEarningsWidget(status, employeeId);
+    } else {
+        // All-employees summary
+        renderAllEmployeesQuarterlySummary();
+    }
+}
+
+/**
+ * Renders the per-employee quarterly earnings detail widget.
+ * @param {object} status - Return object from calculateQuarterlyEarningsStatus()
+ * @param {string} employeeId - The employee ID
+ */
+function renderQuarterlyEarningsWidget(status, employeeId) {
+    const employee = appData.employees.find(e => e.id === employeeId);
+    const empName = employee ? employee.name : 'Unknown';
+    const header = document.getElementById('qetHeader');
+    const body = document.getElementById('qetBody');
+
+    header.textContent = `${status.quarter} ${status.quarterStart.substring(0, 4)} Earnings Target — ${empName}`;
+
+    // Determine progress bar class
+    let barClass = 'qet-on-track';
+    if (!status.targetReachable) barClass = 'qet-unreachable';
+    else if (status.percentComplete < 50 && status.remainingPeriods <= 3) barClass = 'qet-tight';
+
+    const pct = Math.min(status.percentComplete, 100);
+
+    let html = '';
+
+    // Section 1: Quarter Progress Summary
+    html += `<div style="margin-bottom: 15px;">`;
+    html += `<div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:5px;">`;
+    html += `<span><strong>Target:</strong> $${status.target.toFixed(2)}</span>`;
+    html += `<span><strong>Earned:</strong> $${status.quarterGross.toFixed(2)} (${status.percentComplete}%)</span>`;
+    html += `</div>`;
+    html += `<div class="qet-progress-bar"><div class="qet-progress-fill ${barClass}" style="width:${pct}%"></div></div>`;
+
+    if (status.targetMet) {
+        html += `<div class="qet-status-met">&#10003; Target Met — $${status.quarterGross.toFixed(2)} earned</div>`;
+    } else if (!status.targetReachable) {
+        html += `<div class="qet-status-unreachable">&#9888; Target unreachable — $${status.shortfall.toFixed(2)} shortfall</div>`;
+    } else {
+        html += `<span><strong>Remaining:</strong> $${status.remaining.toFixed(2)}</span>`;
+    }
+
+    html += `<div style="margin-top:5px; font-size:0.9em; color:#6c757d;">`;
+    html += `Periods: ${status.completedPeriods} of ${status.totalPeriodsInQuarter} complete`;
+    if (status.missedPeriods > 0) html += ` · ${status.missedPeriods} missed`;
+    html += ` · ${status.remainingPeriods} remaining`;
+    html += `<br>Hours worked: ${status.quarterHours} · Projected total: ${status.projectedQuarterHours}`;
+    html += `</div></div>`;
+
+    // Section 2: Next Period Recommendation
+    if (status.schedule.length > 0) {
+        html += `<hr style="margin:10px 0;">`;
+
+        if (status.targetMet) {
+            html += `<div><strong>Target met.</strong> Schedule remaining periods at minimum (${appData.settings.minimumWeeklyHours} hrs).</div>`;
+        } else {
+            html += `<div style="margin-bottom:8px;">`;
+            html += `<strong>NEXT PERIOD:</strong> #${status.nextPeriodNumber} (Pay date: ${status.nextPeriodPayDate})`;
+            html += `<div style="font-size:1.3em; font-weight:bold; color:#0056b3; margin:4px 0;">Recommended hours: ${status.nextPeriodHours}</div>`;
+            html += `</div>`;
+        }
+
+        html += `<div style="font-size:0.9em;"><strong>Remaining schedule:</strong></div>`;
+        html += `<div class="qet-schedule">`;
+        for (const s of status.schedule) {
+            html += `<span class="qet-schedule-item">P${s.period}: ${s.hours}</span>`;
+        }
+        html += `</div>`;
+
+        html += `<div style="font-size:0.9em; color:#6c757d;">Projected quarter total: $${status.projectedQuarterGross.toFixed(2)} (${status.projectedQuarterHours} hrs)</div>`;
+    } else if (!status.targetMet && status.remainingPeriods === 0) {
+        html += `<hr style="margin:10px 0;">`;
+        html += `<div class="qet-status-unreachable">No remaining periods this quarter.</div>`;
+    }
+
+    body.innerHTML = html;
+}
+
+/**
+ * Renders an all-employees summary table for the quarterly earnings widget.
+ */
+function renderAllEmployeesQuarterlySummary() {
+    const header = document.getElementById('qetHeader');
+    const body = document.getElementById('qetBody');
+    const today = new Date();
+    const qInfo = getQuarterForDate(today);
+
+    header.textContent = `${qInfo.quarter} ${qInfo.year} Quarterly Earnings Summary`;
+
+    let html = `<table class="qet-summary-table">`;
+    html += `<thead><tr><th>Employee</th><th>Earned</th><th>Target</th><th>%</th><th>Status</th></tr></thead>`;
+    html += `<tbody>`;
+
+    for (const emp of appData.employees) {
+        const status = logic.calculateQuarterlyEarningsStatus(emp.id);
+        let statusText, statusClass;
+
+        if (status.targetMet) {
+            statusText = '&#10003; Met';
+            statusClass = 'qet-status-met';
+        } else if (!status.targetReachable) {
+            statusText = '&#9888; Unreachable';
+            statusClass = 'qet-status-unreachable';
+        } else if (status.percentComplete >= 50 || status.remainingPeriods > 3) {
+            statusText = 'On Track';
+            statusClass = 'qet-status-track';
+        } else {
+            statusText = 'Tight';
+            statusClass = 'qet-status-tight';
+        }
+
+        html += `<tr>`;
+        html += `<td>${emp.name}</td>`;
+        html += `<td>$${status.quarterGross.toFixed(2)}</td>`;
+        html += `<td>$${status.target.toFixed(2)}</td>`;
+        html += `<td>${status.percentComplete}%</td>`;
+        html += `<td class="${statusClass}">${statusText}</td>`;
+        html += `</tr>`;
+    }
+
+    html += `</tbody></table>`;
+    body.innerHTML = html;
 }

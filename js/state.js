@@ -49,7 +49,9 @@ export const defaultAppData = {
             state: 'monthly',
             local: 'monthly'
         },
-        autoSubtraction: true
+        autoSubtraction: true,
+        quarterlyEarningsTarget: 1890,
+        minimumWeeklyHours: 20
     },
     employees: [],
     payPeriods: {},
@@ -245,6 +247,13 @@ export async function loadData() {
         // Add autoSubtraction setting for backward compatibility (v7)
         if (appData.settings.autoSubtraction === undefined) {
             appData.settings.autoSubtraction = true;
+        }
+        // Add quarterly earnings target settings for backward compatibility (v10)
+        if (appData.settings.quarterlyEarningsTarget === undefined) {
+            appData.settings.quarterlyEarningsTarget = defaultAppData.settings.quarterlyEarningsTarget;
+        }
+        if (appData.settings.minimumWeeklyHours === undefined) {
+            appData.settings.minimumWeeklyHours = defaultAppData.settings.minimumWeeklyHours;
         }
     } else {
         // Use a deep copy of the default data if nothing is found anywhere

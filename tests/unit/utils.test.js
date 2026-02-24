@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { formatDate, parseDateInput, toStorageDate, fromStorageDate, toDisplayDate, fromLegacyDate } from '../../js/utils.js';
+import { formatDate, parseDateInput, toStorageDate, fromStorageDate, toDisplayDate, fromLegacyDate, getQuarterForDate } from '../../js/utils.js';
 import { appData } from '../../js/state.js';
 
 describe('utils.js', () => {
@@ -227,6 +227,47 @@ describe('utils.js', () => {
         const result = parseDateInput('02/2023', 'monthly');
         expect(result.end).toEqual(new Date(2023, 1, 28, 23, 59, 59)); // Feb 28
       });
+    });
+  });
+
+  describe('getQuarterForDate()', () => {
+    it('should return Q1 for January 15', () => {
+      const result = getQuarterForDate(new Date(2026, 0, 15));
+      expect(result.quarter).toBe('Q1');
+      expect(result.quarterNum).toBe(1);
+      expect(result.start).toBe('2026-01-01');
+      expect(result.end).toBe('2026-03-31');
+      expect(result.year).toBe(2026);
+    });
+
+    it('should return Q2 for April 1', () => {
+      const result = getQuarterForDate(new Date(2026, 3, 1));
+      expect(result.quarter).toBe('Q2');
+      expect(result.quarterNum).toBe(2);
+      expect(result.start).toBe('2026-04-01');
+      expect(result.end).toBe('2026-06-30');
+    });
+
+    it('should return Q3 for July 31', () => {
+      const result = getQuarterForDate(new Date(2026, 6, 31));
+      expect(result.quarter).toBe('Q3');
+      expect(result.quarterNum).toBe(3);
+      expect(result.start).toBe('2026-07-01');
+      expect(result.end).toBe('2026-09-30');
+    });
+
+    it('should return Q4 for December 31', () => {
+      const result = getQuarterForDate(new Date(2026, 11, 31));
+      expect(result.quarter).toBe('Q4');
+      expect(result.quarterNum).toBe(4);
+      expect(result.start).toBe('2026-10-01');
+      expect(result.end).toBe('2026-12-31');
+    });
+
+    it('should handle leap year February correctly', () => {
+      const result = getQuarterForDate(new Date(2024, 1, 29)); // Feb 29 leap year
+      expect(result.quarter).toBe('Q1');
+      expect(result.end).toBe('2024-03-31');
     });
   });
 });

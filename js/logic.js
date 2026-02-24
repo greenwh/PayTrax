@@ -12,7 +12,7 @@
 // Reports and CSV exports are in reports.js
 
 import { appData } from './state.js';
-import { formatDate, fromStorageDate } from './utils.js';
+import { formatDate, fromStorageDate, toDisplayDate, getQuarterForDate } from './utils.js';
 import { addTransaction } from './banking.js';
 import { calculateDeductions } from './employees.js';
 
@@ -448,4 +448,203 @@ export function updateSettingsFromUI() {
     appData.settings.taxFrequencies.state = document.getElementById('stateTaxFrequency').value;
     appData.settings.taxFrequencies.local = document.getElementById('localTaxFrequency').value;
     appData.settings.autoSubtraction = document.getElementById('autoSubtraction').checked;
+    appData.settings.quarterlyEarningsTarget = parseFloat(document.getElementById('quarterlyEarningsTarget').value) || 0;
+    appData.settings.minimumWeeklyHours = parseFloat(document.getElementById('minimumWeeklyHours').value) || 0;
+}
+
+// --- QUARTERLY EARNINGS TARGET ---
+
+/**
+ * Calculates quarterly earnings progress and recommended hours for an employee.
+ * Uses today's date to determine the current quarter, then analyzes completed
+ * and remaining pay periods to produce a recommended schedule.
+ *
+ * @param {string} employeeId - The employee ID
+ * @param {Date} [today] - Override today's date (for testing)
+ * @returns {object} Quarterly earnings status
+ */
+export function calculateQuarterlyEarningsStatus(employeeId, today) {
+    if (!today) today = new Date();
+    const employee = appData.employees.find(e => e.id === employeeId);
+    const target = appData.settings.quarterlyEarningsTarget || 0;
+    const minHours = appData.settings.minimumWeeklyHours || 0;
+
+    // Get current quarter boundaries
+    const qInfo = getQuarterForDate(today);
+    const qStart = qInfo.start;
+    const qEnd = qInfo.end;
+
+    // Default empty response
+    const emptyResult = {
+        quarter: qInfo.quarter,
+        quarterStart: qStart,
+        quarterEnd: qEnd,
+        target,
+        completedPeriods: 0,
+        totalPeriodsInQuarter: 0,
+        remainingPeriods: 0,
+        missedPeriods: 0,
+        quarterGross: 0,
+        quarterHours: 0,
+        remaining: target,
+        percentComplete: 0,
+        targetMet: target === 0,
+        targetReachable: target === 0,
+        shortfall: target === 0 ? 0 : target,
+        nextPeriodHours: 0,
+        nextPeriodNumber: null,
+        nextPeriodPayDate: '',
+        schedule: [],
+        projectedQuarterGross: 0,
+        projectedQuarterHours: 0
+    };
+
+    if (!employee) return emptyResult;
+
+    const rate = employee.rate || 0;
+    const periods = appData.payPeriods[employeeId] || [];
+
+    if (periods.length === 0) return emptyResult;
+
+    // Target of 0 means feature is disabled
+    if (target === 0) {
+        return { ...emptyResult, targetMet: true, targetReachable: true, shortfall: 0 };
+    }
+
+    // Filter periods in this quarter by payDate
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const quarterPeriods = periods.filter(p => p.payDate >= qStart && p.payDate <= qEnd);
+
+    if (quarterPeriods.length === 0) return emptyResult;
+
+    // Sort by period number
+    quarterPeriods.sort((a, b) => a.period - b.period);
+
+    // Categorize periods
+    const completed = [];
+    const remaining = [];
+    let missedCount = 0;
+
+    for (const p of quarterPeriods) {
+        const totalHours = p.hours ? Object.values(p.hours).reduce((a, b) => a + b, 0) : 0;
+        if (p.grossPay > 0 || totalHours > 0) {
+            completed.push(p);
+        } else if (p.payDate >= todayStr) {
+            remaining.push(p);
+        } else {
+            missedCount++;
+        }
+    }
+
+    // Calculate progress
+    let quarterGross = 0;
+    let quarterHours = 0;
+    for (const p of completed) {
+        quarterGross += p.grossPay;
+        if (p.hours) {
+            quarterHours += Object.values(p.hours).reduce((a, b) => a + b, 0);
+        }
+    }
+
+    const remainingDollars = Math.max(0, target - quarterGross);
+    const percentComplete = target > 0 ? Math.round((quarterGross / target) * 1000) / 10 : 100;
+    const targetMet = quarterGross >= target;
+
+    // Build schedule for remaining periods
+    const remainingCount = remaining.length;
+    let schedule = [];
+    let targetReachable = true;
+    let shortfall = 0;
+
+    if (targetMet) {
+        // Target already met — schedule all remaining at minHours
+        schedule = remaining.map(p => ({
+            period: p.period,
+            payDate: toDisplayDate(p.payDate),
+            hours: minHours
+        }));
+    } else if (remainingCount === 0) {
+        // No periods left
+        targetReachable = false;
+        shortfall = remainingDollars;
+    } else if (rate === 0) {
+        // Rate is 0 — can't earn anything
+        targetReachable = false;
+        shortfall = remainingDollars;
+        schedule = remaining.map(p => ({
+            period: p.period,
+            payDate: toDisplayDate(p.payDate),
+            hours: minHours
+        }));
+    } else {
+        // Calculate hours needed
+        const hoursNeeded = Math.ceil(remainingDollars / rate);
+        const maxHoursPerPeriod = 40;
+        const maxCapacity = remainingCount * maxHoursPerPeriod;
+
+        if (hoursNeeded > maxCapacity) {
+            targetReachable = false;
+            shortfall = remainingDollars - (maxCapacity * rate);
+            shortfall = Math.round(shortfall * 100) / 100;
+            // Schedule all at max
+            schedule = remaining.map(p => ({
+                period: p.period,
+                payDate: toDisplayDate(p.payDate),
+                hours: maxHoursPerPeriod
+            }));
+        } else {
+            // Front-loaded distribution
+            // Start all at minHours, then distribute extras from front
+            const hoursArr = new Array(remainingCount).fill(minHours);
+            let extraHoursNeeded = hoursNeeded - (remainingCount * minHours);
+
+            if (extraHoursNeeded > 0) {
+                // Distribute +1 at a time from front, looping as needed
+                let idx = 0;
+                while (extraHoursNeeded > 0) {
+                    if (hoursArr[idx] < maxHoursPerPeriod) {
+                        hoursArr[idx]++;
+                        extraHoursNeeded--;
+                    }
+                    idx++;
+                    if (idx >= remainingCount) idx = 0;
+                }
+            }
+
+            schedule = remaining.map((p, i) => ({
+                period: p.period,
+                payDate: toDisplayDate(p.payDate),
+                hours: hoursArr[i]
+            }));
+        }
+    }
+
+    // Calculate projected totals
+    const scheduledHours = schedule.reduce((sum, s) => sum + s.hours, 0);
+    const projectedQuarterGross = Math.round((quarterGross + scheduledHours * rate) * 100) / 100;
+    const projectedQuarterHours = quarterHours + scheduledHours;
+
+    return {
+        quarter: qInfo.quarter,
+        quarterStart: qStart,
+        quarterEnd: qEnd,
+        target,
+        completedPeriods: completed.length,
+        totalPeriodsInQuarter: quarterPeriods.length,
+        remainingPeriods: remainingCount,
+        missedPeriods: missedCount,
+        quarterGross: Math.round(quarterGross * 100) / 100,
+        quarterHours,
+        remaining: Math.round(remainingDollars * 100) / 100,
+        percentComplete,
+        targetMet,
+        targetReachable,
+        shortfall: Math.round(shortfall * 100) / 100,
+        nextPeriodHours: schedule.length > 0 ? schedule[0].hours : 0,
+        nextPeriodNumber: schedule.length > 0 ? schedule[0].period : null,
+        nextPeriodPayDate: schedule.length > 0 ? schedule[0].payDate : '',
+        schedule,
+        projectedQuarterGross,
+        projectedQuarterHours
+    };
 }

@@ -8,7 +8,7 @@
 */
 // The authoritative data version number lives here in migration.js.
 // state.js and data-io.js import it from here.
-export const CURRENT_VERSION = 9;
+export const CURRENT_VERSION = 10;
 
 /**
  * Migrates a data object to a new version by adding a new setting with a default value.
@@ -215,6 +215,25 @@ function migrateToV9(data) {
 }
 
 /**
+ * Migrates from version 9 to version 10.
+ * - Adds quarterlyEarningsTarget setting ($1,890 default for 2026 SSA quarterly work credit)
+ * - Adds minimumWeeklyHours setting (20 hours default)
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV10(data) {
+    console.log("Running migration to v10...");
+
+    if (!data.settings.quarterlyEarningsTarget && data.settings.quarterlyEarningsTarget !== 0) {
+        data.settings.quarterlyEarningsTarget = 1890;
+    }
+    if (!data.settings.minimumWeeklyHours && data.settings.minimumWeeklyHours !== 0) {
+        data.settings.minimumWeeklyHours = 20;
+    }
+
+    data.version = 10; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -248,6 +267,9 @@ export function migrateData(data) {
             // Fall-through is intentional
         case 8:
             migrateToV9(data);
+            // Fall-through is intentional
+        case 9:
+            migrateToV10(data);
             // Fall-through is intentional for future migrations
             break;
     }
