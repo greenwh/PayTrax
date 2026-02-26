@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Key Characteristics:**
 - Vanilla JavaScript (no frameworks, no TypeScript, no build tools)
-- ~4,500+ lines of code across 12 ES6 modules
+- ~5,000+ lines of code across 15 ES6 modules
 - IndexedDB for persistent storage with localStorage fallback
 - Progressive Web App (PWA) with offline support via Service Worker
 - Privacy-first: 100% client-side, no data leaves the browser
@@ -107,11 +107,11 @@ python -m http.server 8000
 
 **Test Framework:** Vitest with browser mode (Playwright)
 **Coverage Provider:** Istanbul (works with browser mode)
-**Test Files:** 301 tests across utils, validation, db, migration, and integration modules
+**Test Files:** 351 tests across utils, validation, db, migration, toast, undo, audit, and integration modules
 
 **Running Tests:**
 ```bash
-npm test                 # Run all tests
+npm test                 # Run all 351 tests
 npm run test:watch       # Run tests in watch mode
 npm run test:ui          # Open Vitest UI dashboard
 npm run test:coverage    # Run tests with coverage report
@@ -159,6 +159,9 @@ js/migration.js   → Data versioning (v1→v9 backward compatibility)
 js/utils.js       → Date utilities (formatDate, fromStorageDate, toDisplayDate, fromLegacyDate, parseDateInput)
 js/validation.js  → Comprehensive data validation module
 js/pdf-export.js  → PDF generation for pay stubs and reports (jsPDF)
+js/toast.js       → Toast notification system (replaces alert() calls)
+js/undo.js        → Undo support for destructive operations (delete employee/deduction/transaction)
+js/audit.js       → Audit trail logging (action history, auto-prune at 500 entries)
 ```
 
 ### State Management Pattern
@@ -173,7 +176,7 @@ js/pdf-export.js  → PDF generation for pay stubs and reports (jsPDF)
 **Data Structure:**
 ```javascript
 appData = {
-  version: 9,  // Updated from 8 to 9
+  version: 11,  // Current data version
   settings: {
     companyName, taxYear, payFrequency, firstPayPeriodStartDate,
     socialSecurity, medicare, sutaRate, futaRate,
@@ -198,7 +201,9 @@ appData = {
     deductions: [...],  // NEW in v5
     totalDeductions     // NEW in v5
   }],
-  bankRegister: [{ id, date, description, debit, credit, reconciled }]
+  bankRegister: [{ id, date, description, debit, credit, reconciled }],
+  auditLog: [{ timestamp, action, details }],  // NEW v11
+  lastBackupDate: null  // ISO string, set on export
 }
 ```
 
@@ -233,13 +238,17 @@ Single module import triggers entire app initialization. Service Worker is regis
 | Bank Register | `banking.js` | `addTransaction()`, `reconcileTransaction()`, `filterTransactions()`, CSV export |
 | Import/Export | `data-io.js` | `importData()`, `exportData()` (with version checking) |
 | **Data Validation** | `validation.js` | `validateEmployee()`, `validateHours()`, `validateSettings()`, `validateTransaction()`, `validateDeduction()` **NEW v5** |
-| Backward Compatibility | `migration.js` | Handles v1→v9 data migration sequentially |
+| **Toast Notifications** | `toast.js` | `showToast()`, `dismissToast()`, `dismissAllToasts()` **NEW v11** |
+| **Undo Operations** | `undo.js` | `pushUndo()`, `createSnapshot()` for delete employee/deduction/transaction **NEW v11** |
+| **Audit Trail** | `audit.js` + `ui.js` | `logAudit()`, `getAuditLog()`, `clearAuditLog()`, `renderAuditLog()` **NEW v11** |
+| **Compliance Summary** | `ui.js` | `refreshComplianceSummary()` — filing deadlines, YTD totals, backup status **NEW v11** |
+| Backward Compatibility | `migration.js` | Handles v1→v11 data migration sequentially |
 
 ## Data Versioning & Migration
 
-**Current Version:** 9
+**Current Version:** 11
 
-Data is automatically migrated both on IndexedDB load (startup) and during JSON import. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v9 transformations are applied. `CURRENT_VERSION` is defined in `migration.js` and re-exported from `state.js`.
+Data is automatically migrated both on IndexedDB load (startup) and during JSON import. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v11 transformations are applied. `CURRENT_VERSION` is defined in `migration.js` and re-exported from `state.js`.
 
 **Version History:**
 - v1 → Initial structure
@@ -251,12 +260,14 @@ Data is automatically migrated both on IndexedDB load (startup) and during JSON 
 - v7 → Added autoSubtraction setting for bank register toggle
 - v8 → Added sutaWageBase setting ($25,000 OK default), wage base cap enforcement at calculation time
 - v9 → Standardized all dates to YYYY-MM-DD storage format (converted from M/D/YYYY)
+- v10 → Added quarterlyEarningsTarget and minimumWeeklyHours settings
+- v11 → Added auditLog array for tracking user actions
 
 ## PWA & Offline Support
 
 **Service Worker (`sw.js`):**
 - Cache-first strategy with network fallback
-- Cache name: `paytrax-cache-v4`
+- Cache name: `paytrax-cache-v15`
 - All app assets are cached for offline functionality
 - Full app works without internet connection
 

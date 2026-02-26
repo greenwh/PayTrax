@@ -9,6 +9,7 @@
 import { appData } from './state.js';
 import * as logic from './logic.js';
 import { formatDate, parseDateInput, fromStorageDate, toDisplayDate, getQuarterForDate } from './utils.js';
+import { getAuditLog } from './audit.js';
 
 // --- UI & TAB MANAGEMENT ---
 
@@ -674,4 +675,160 @@ function renderAllEmployeesQuarterlySummary() {
 
     html += `</tbody></table>`;
     body.innerHTML = html;
+}
+
+// --- COMPLIANCE SUMMARY ---
+
+/**
+ * Refreshes the compliance summary widget on the dashboard.
+ */
+export function refreshComplianceSummary() {
+    const widget = document.getElementById('complianceSummaryWidget');
+    if (!widget) return;
+
+    const taxYear = appData.settings.taxYear || new Date().getFullYear();
+    const today = new Date();
+
+    // 1. Next Filing Deadline
+    const deadlineEl = document.getElementById('csNextDeadline');
+    const deadlineTypeEl = document.getElementById('csDeadlineType');
+    const { deadlineDate, deadlineLabel } = getNextFilingDeadline(today, taxYear);
+    deadlineEl.textContent = deadlineDate;
+    deadlineTypeEl.textContent = deadlineLabel;
+
+    // 2. YTD Wages & Taxes
+    let ytdGross = 0;
+    let ytdEmployeeTaxes = 0;
+    let ytdEmployerTaxes = 0;
+
+    for (const employeeId of Object.keys(appData.payPeriods)) {
+        const periods = appData.payPeriods[employeeId] || [];
+        for (const p of periods) {
+            if (!p.grossPay || p.grossPay === 0) continue;
+            const payDate = fromStorageDate(p.payDate);
+            if (payDate.getFullYear() !== taxYear) continue;
+
+            ytdGross += p.grossPay;
+            ytdEmployeeTaxes += (p.taxes.federal || 0) + (p.taxes.fica || 0) +
+                (p.taxes.medicare || 0) + (p.taxes.state || 0) + (p.taxes.local || 0);
+            ytdEmployerTaxes += (p.taxes.suta || 0) + (p.taxes.futa || 0) +
+                (p.taxes.fica || 0) + (p.taxes.medicare || 0);
+        }
+    }
+
+    document.getElementById('csYtdWages').textContent = `$${ytdGross.toFixed(2)}`;
+    document.getElementById('csYtdTaxes').textContent = `Taxes: $${(ytdEmployeeTaxes + ytdEmployerTaxes).toFixed(2)}`;
+
+    // 3. Pay Period Status
+    let totalPeriods = 0;
+    let periodsWithHours = 0;
+
+    for (const employeeId of Object.keys(appData.payPeriods)) {
+        const periods = appData.payPeriods[employeeId] || [];
+        for (const p of periods) {
+            const payDate = fromStorageDate(p.payDate);
+            if (payDate.getFullYear() !== taxYear) continue;
+            totalPeriods++;
+            const totalHours = p.hours ? Object.values(p.hours).reduce((a, b) => a + b, 0) : 0;
+            if (totalHours > 0) periodsWithHours++;
+        }
+    }
+
+    document.getElementById('csPeriodStatus').textContent = `${periodsWithHours} of ${totalPeriods}`;
+
+    // 4. Last Backup
+    const lastBackup = appData.lastBackupDate;
+    const backupEl = document.getElementById('csLastBackup');
+    if (lastBackup) {
+        const backupDate = new Date(lastBackup);
+        backupEl.textContent = backupDate.toLocaleDateString();
+        const daysSince = Math.floor((today - backupDate) / (1000 * 60 * 60 * 24));
+        document.getElementById('csBackupLabel').textContent = daysSince === 0
+            ? 'Backed up today'
+            : `${daysSince} day${daysSince === 1 ? '' : 's'} ago`;
+    } else {
+        backupEl.textContent = 'Never';
+        document.getElementById('csBackupLabel').textContent = 'Export a backup regularly';
+    }
+}
+
+/**
+ * Calculates the next filing deadline based on current date.
+ * @param {Date} today
+ * @param {number} taxYear
+ * @returns {{ deadlineDate: string, deadlineLabel: string }}
+ */
+function getNextFilingDeadline(today, taxYear) {
+    // Quarterly 941 deadlines: Q1=Apr 30, Q2=Jul 31, Q3=Oct 31, Q4=Jan 31 (next year)
+    const deadlines = [
+        { date: new Date(taxYear, 3, 30), label: 'Form 941 — Q1' },
+        { date: new Date(taxYear, 6, 31), label: 'Form 941 — Q2' },
+        { date: new Date(taxYear, 9, 31), label: 'Form 941 — Q3' },
+        { date: new Date(taxYear + 1, 0, 31), label: 'Form 941 — Q4 / Form 940 Annual' }
+    ];
+
+    for (const d of deadlines) {
+        if (today <= d.date) {
+            return {
+                deadlineDate: toDisplayDate(`${d.date.getFullYear()}-${String(d.date.getMonth() + 1).padStart(2, '0')}-${String(d.date.getDate()).padStart(2, '0')}`),
+                deadlineLabel: d.label
+            };
+        }
+    }
+
+    // Past all deadlines for this year — show next year Q1
+    const nextYear = taxYear + 1;
+    return {
+        deadlineDate: toDisplayDate(`${nextYear}-04-30`),
+        deadlineLabel: `Form 941 — Q1 ${nextYear}`
+    };
+}
+
+// --- AUDIT LOG UI ---
+
+/**
+ * Renders the audit log table in the Settings tab.
+ */
+export function renderAuditLog() {
+    const tbody = document.getElementById('auditLogTableBody');
+    const countEl = document.getElementById('auditLogCount');
+    if (!tbody) return;
+
+    const log = getAuditLog();
+    tbody.innerHTML = '';
+
+    countEl.textContent = `${log.length} entries`;
+
+    if (log.length === 0) {
+        const row = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.style.textAlign = 'center';
+        td.style.fontStyle = 'italic';
+        td.style.color = '#6c757d';
+        td.textContent = 'No audit log entries';
+        row.appendChild(td);
+        tbody.appendChild(row);
+        return;
+    }
+
+    for (const entry of log) {
+        const row = document.createElement('tr');
+
+        const timestampTd = document.createElement('td');
+        timestampTd.style.whiteSpace = 'nowrap';
+        const date = new Date(entry.timestamp);
+        timestampTd.textContent = date.toLocaleString();
+
+        const actionTd = document.createElement('td');
+        actionTd.textContent = entry.action;
+
+        const detailsTd = document.createElement('td');
+        detailsTd.textContent = entry.details;
+
+        row.appendChild(timestampTd);
+        row.appendChild(actionTd);
+        row.appendChild(detailsTd);
+        tbody.appendChild(row);
+    }
 }

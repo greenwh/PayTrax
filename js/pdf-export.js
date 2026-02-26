@@ -10,6 +10,7 @@
 
 import { appData } from './state.js';
 import { fromStorageDate, toDisplayDate } from './utils.js';
+import { showToast } from './toast.js';
 
 /**
  * Exports pay stub to PDF
@@ -19,19 +20,19 @@ import { fromStorageDate, toDisplayDate } from './utils.js';
 export function exportPayStubToPDF(employeeId, periodNum) {
     const employee = appData.employees.find(e => e.id === employeeId);
     if (!employee) {
-        alert('Employee not found');
+        showToast('Employee not found', 'error');
         return;
     }
 
     const periods = appData.payPeriods[employeeId];
     if (!periods) {
-        alert('No pay periods found');
+        showToast('No pay periods found', 'error');
         return;
     }
 
     const period = periods[parseInt(periodNum) - 1];
     if (!period) {
-        alert('Pay period not found');
+        showToast('Pay period not found', 'error');
         return;
     }
 

@@ -97,10 +97,11 @@ export function createMonthlySettings(overrides = {}) {
  */
 export function createTestAppData(settingsOverrides = {}, employees = []) {
   return {
-    version: 10,
+    version: 11,
     settings: createTestSettings(settingsOverrides),
     employees: employees,
     payPeriods: {},
-    bankRegister: []
+    bankRegister: [],
+    auditLog: []
   };
 }

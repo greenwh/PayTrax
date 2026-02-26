@@ -55,7 +55,8 @@ export const defaultAppData = {
     },
     employees: [],
     payPeriods: {},
-    bankRegister: []
+    bankRegister: [],
+    auditLog: []
 };
 
 
@@ -193,6 +194,9 @@ export async function loadData() {
         if (!Array.isArray(loadedData.bankRegister)) {
             console.error('Loaded data has invalid bankRegister structure. Using empty array.');
             loadedData.bankRegister = [];
+        }
+        if (!Array.isArray(loadedData.auditLog)) {
+            loadedData.auditLog = [];
         }
 
         // Run migrations if data is from an older version

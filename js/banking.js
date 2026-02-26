@@ -11,6 +11,9 @@
 import { appData, saveData, saveDataImmediate } from './state.js';
 import { generateBasePayPeriods } from './logic.js';
 import { fromStorageDate, toDisplayDate } from './utils.js';
+import { showToast } from './toast.js';
+import { createSnapshot, pushUndo } from './undo.js';
+import { logAudit } from './audit.js';
 
 // --- EVENT HANDLER FUNCTIONS (Internal to this module) ---
 
@@ -30,12 +33,24 @@ function handleRegisterClick(event) {
     const cancelButton = event.target.closest('.cancel-transaction-btn');
 
     if (deleteButton) {
-        if (confirm('Are you sure you want to delete this transaction?')) {
-            const transId = deleteButton.dataset.id;
-            deleteTransaction(transId);
+        const transId = deleteButton.dataset.id;
+        const transaction = appData.bankRegister.find(t => t.id === transId);
+        if (!transaction) return;
+
+        const snapshot = createSnapshot(transaction);
+        const transDesc = transaction.description;
+
+        deleteTransaction(transId);
+        displayRegister();
+        saveData();
+        logAudit('Transaction Deleted', `${transDesc} ($${(transaction.debit || transaction.credit).toFixed(2)})`);
+
+        pushUndo(`Deleted transaction ${transDesc}`, snapshot, (snap) => {
+            appData.bankRegister.push(snap);
             displayRegister();
-            saveData();
-        }
+            saveDataImmediate();
+            logAudit('Undo', `Restored transaction ${snap.description}`);
+        });
     }
 
     if (reconcileCheckbox) {
@@ -71,7 +86,7 @@ function handlePurgeConfirm() {
     const cutoffDateEl = document.getElementById('purgeCutoffDate');
     const cutoffDate = cutoffDateEl.value;
     if (!cutoffDate) {
-        alert('Please select a cutoff date.');
+        showToast('Please select a cutoff date.', 'warning');
         return;
     }
 
@@ -95,7 +110,8 @@ function handlePurgeConfirm() {
         const message = openingBalance !== 0
             ? `${purgedCount} transaction(s) have been purged. Opening balance of $${openingBalance.toFixed(2)} created.`
             : `${purgedCount} transaction(s) have been purged.`;
-        alert(message);
+        showToast(message, 'success');
+        logAudit('Transactions Purged', `${purgedCount} transactions purged through ${cutoffDate}`);
 
         displayRegister();
         saveDataImmediate();
@@ -320,7 +336,7 @@ function saveTransactionEdit(transId) {
     const amountInput = parseFloat(document.getElementById(`edit-amount-${transId}`).value);
 
     if (!dateInput || !descInput || !amountInput || amountInput <= 0) {
-        alert('Please fill in all fields with valid values.');
+        showToast('Please fill in all fields with valid values.', 'warning');
         return;
     }
 
@@ -451,7 +467,7 @@ function exportTransactionsToCSV() {
     const transactionsToExport = filterTransactions(appData.bankRegister, filters);
 
     if (transactionsToExport.length === 0) {
-        alert('No transactions to export with the current filters.');
+        showToast('No transactions to export with the current filters.', 'warning');
         return;
     }
 
@@ -730,7 +746,7 @@ function fuzzyMatchTransaction(newTrans) {
 function importCsvTransactions(csvContent, autoReconcile) {
     const lines = csvContent.split('\n').filter(line => line.trim());
     if (lines.length < 2) {
-        alert('CSV file is empty or has no data rows.');
+        showToast('CSV file is empty or has no data rows.', 'error');
         return;
     }
 
@@ -738,7 +754,7 @@ function importCsvTransactions(csvContent, autoReconcile) {
     const format = detectCsvFormat(headerLine);
 
     if (format === 0) {
-        alert('Unable to detect CSV format. Please ensure the file matches one of the supported formats.');
+        showToast('Unable to detect CSV format. Please ensure the file matches one of the supported formats.', 'error');
         return;
     }
 
@@ -778,7 +794,7 @@ function importCsvTransactions(csvContent, autoReconcile) {
         ? `Import complete!\n\nAdded: ${addedCount} new transactions\nReconciled: ${reconciledCount} existing transactions\nSkipped: ${skippedCount} duplicates`
         : `Sync complete!\n\nAdded: ${addedCount} new transactions\nSkipped: ${skippedCount} duplicates`;
 
-    alert(message);
+    showToast(message, 'success');
 }
 
 function handleCsvImport(autoReconcile) {
@@ -786,7 +802,7 @@ function handleCsvImport(autoReconcile) {
     const file = fileInput.files[0];
 
     if (!file) {
-        alert('Please select a CSV file to import.');
+        showToast('Please select a CSV file to import.', 'warning');
         return;
     }
 

@@ -10,6 +10,8 @@
 
 import { appData, saveDataImmediate, replaceState, CURRENT_VERSION } from './state.js';
 import { migrateData } from './migration.js';
+import { showToast } from './toast.js';
+import { logAudit } from './audit.js';
 
 /**
  * Handles the process of importing data from a user-selected JSON file.
@@ -48,18 +50,19 @@ export function importData() {
 
                 replaceState(importedData);
                 await saveDataImmediate();
+                logAudit('Data Imported', `Version ${importVersion} → ${CURRENT_VERSION}`);
 
-                alert(message + ' The application will now reload.');
-                window.location.reload();
+                showToast(message + ' Reloading...', 'success');
+                setTimeout(() => window.location.reload(), 1500);
 
             } catch (error) {
                 console.error("Failed to import data:", error);
-                alert(`Error importing data: ${error.message}`);
+                showToast(`Error importing data: ${error.message}`, 'error');
             }
         };
-        
+
         reader.onerror = () => {
-             alert('Error reading the selected file.');
+             showToast('Error reading the selected file.', 'error');
         };
 
         reader.readAsText(file);
@@ -74,6 +77,7 @@ export function importData() {
 export function exportData() {
     try {
         appData.version = CURRENT_VERSION;
+        appData.lastBackupDate = new Date().toISOString();
         // Create a formatted JSON string from the application data
         const dataStr = JSON.stringify(appData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -93,8 +97,10 @@ export function exportData() {
         // Clean up the object URL
         URL.revokeObjectURL(url);
 
+        logAudit('Data Exported', `Backup created: ${link.download}`);
+
     } catch (error) {
         console.error("Failed to export data:", error);
-        alert('An error occurred while exporting your data.');
+        showToast('An error occurred while exporting your data.', 'error');
     }
 }

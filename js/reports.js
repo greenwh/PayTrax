@@ -10,6 +10,7 @@
 
 import { appData } from './state.js';
 import { parseDateInput, fromStorageDate, toDisplayDate } from './utils.js';
+import { showToast } from './toast.js';
 
 // --- REPORTING LOGIC ---
 
@@ -481,7 +482,7 @@ export function exportW2ReportToCSV(yearStr) {
 export function export941ReportToCSV(periodStr) {
     const { start, end, title } = parseDateInput(periodStr, 'quarterly');
     if (!start) {
-        alert('Invalid period. Use format "Q1 2025".');
+        showToast('Invalid period. Use format "Q1 2025".', 'warning');
         return;
     }
 
@@ -492,7 +493,7 @@ export function export941ReportToCSV(periodStr) {
         });
 
     if (allPayPeriodsInQuarter.length === 0) {
-        alert('No payroll data for this period.');
+        showToast('No payroll data for this period.', 'warning');
         return;
     }
 
@@ -531,7 +532,7 @@ export function export940ReportToCSV(yearStr) {
     const periodsInYear = allPayPeriods.filter(p => fromStorageDate(p.payDate).getFullYear() === year && p.grossPay > 0);
 
     if (periodsInYear.length === 0) {
-        alert('No payroll data for this year.');
+        showToast('No payroll data for this year.', 'warning');
         return;
     }
 

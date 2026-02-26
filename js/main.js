@@ -16,6 +16,9 @@ import * as banking from './banking.js'; // Import the new banking module
 import { importData, exportData } from './data-io.js';
 import * as pdfExport from './pdf-export.js';
 import * as validation from './validation.js';
+import { showToast } from './toast.js';
+import { createSnapshot, pushUndo } from './undo.js';
+import { logAudit, getAuditLog, clearAuditLog } from './audit.js';
 
 // --- EVENT HANDLER FUNCTIONS ---
 // These functions connect user actions to the application's logic and UI updates.
@@ -30,6 +33,7 @@ function handleTabClick(event) {
         ui.showTab(tabButton.dataset.tab, tabButton);
         if (tabButton.dataset.tab === 'dashboard') {
             ui.refreshQuarterlyEarningsWidget();
+            ui.refreshComplianceSummary();
         }
     }
 }
@@ -49,6 +53,7 @@ async function handleSettingsChange() {
     logic.generatePayPeriods();
     handleEmployeeChange(); // Refresh dropdowns and data (also refreshes quarterly widget)
     await saveDataImmediate();
+    logAudit('Settings Changed', `Company: ${appData.settings.companyName}, Year: ${appData.settings.taxYear}`);
 }
 
 /**
@@ -60,6 +65,7 @@ function handleEmployeeChange() {
     ui.displayPayPeriods(employeeId);
     handlePeriodChange();
     ui.refreshQuarterlyEarningsWidget();
+    ui.refreshComplianceSummary();
 }
 
 /**
@@ -97,11 +103,16 @@ function handleHoursChange() {
     logic.calculatePay();
     const employeeId = document.getElementById('currentEmployee').value;
     const periodNum = document.getElementById('currentPeriod').value;
+    const emp = appData.employees.find(e => e.id === employeeId);
+    if (emp && periodNum) {
+        logAudit('Period Calculated', `${emp.name} Period ${periodNum}`);
+    }
     ui.updateDashboardUI(employeeId, periodNum);
     ui.displayPayPeriods(employeeId);
     banking.updateBankProjectionsUI(); // Delegated to banking module
     banking.displayRegister(); // Delegated to banking module
     ui.refreshQuarterlyEarningsWidget();
+    ui.refreshComplianceSummary();
     saveData();
     const currentBalance = banking.getCurrentBankBalance(); // Delegated
     if (currentBalance < 0) {
@@ -136,10 +147,12 @@ async function handleEmployeeFormSubmit(event) {
         return; // Prevent saving if validation fails
     }
 
+    const isEdit = !!document.getElementById('employeeId').value;
     logic.saveEmployeeFromForm();
     ui.populateEmployeeDropdowns();
     ui.resetEmployeeForm();
     await saveDataImmediate();
+    logAudit(isEdit ? 'Employee Edited' : 'Employee Added', employeeData.name);
 }
 
 /**
@@ -154,12 +167,32 @@ function handleEditEmployeeSelect() {
  * Handles deleting an employee.
  */
 async function handleDeleteEmployee() {
-    if (confirm('Are you sure you want to delete this employee and all their payroll data?')) {
-        logic.deleteEmployee();
+    const employeeId = document.getElementById('employeeId').value;
+    if (!employeeId) return;
+
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee) return;
+
+    const snapshot = createSnapshot({
+        employee,
+        payPeriods: appData.payPeriods[employeeId] || []
+    });
+    const employeeName = employee.name;
+
+    logic.deleteEmployee();
+    ui.populateEmployeeDropdowns();
+    ui.resetEmployeeForm();
+    await saveDataImmediate();
+    logAudit('Employee Deleted', employeeName);
+
+    pushUndo(`Deleted ${employeeName}`, snapshot, async (snap) => {
+        appData.employees.push(snap.employee);
+        appData.payPeriods[snap.employee.id] = snap.payPeriods;
         ui.populateEmployeeDropdowns();
         ui.resetEmployeeForm();
         await saveDataImmediate();
-    }
+        logAudit('Undo', `Restored employee ${snap.employee.name}`);
+    });
 }
 
 /**
@@ -168,7 +201,7 @@ async function handleDeleteEmployee() {
 async function handleAddDeduction() {
     const employeeId = document.getElementById('employeeId').value;
     if (!employeeId) {
-        alert('Please save the employee first before adding deductions.');
+        showToast('Please save the employee first before adding deductions.', 'warning');
         return;
     }
 
@@ -195,6 +228,7 @@ async function handleAddDeduction() {
         // Trigger recalculation of all periods for this employee
         logic.recalculateAllPeriodsForEmployee(employeeId);
         await saveDataImmediate();
+        logAudit('Deduction Added', `${name} (${type}: ${amount}) for ${appData.employees.find(e => e.id === employeeId)?.name || employeeId}`);
     }
 }
 
@@ -209,15 +243,33 @@ async function handleDeleteDeduction(event) {
     const deductionId = deleteButton.dataset.deductionId;
     const employeeId = document.getElementById('employeeId').value;
 
-    if (!confirm('Are you sure you want to delete this deduction?')) return;
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee) return;
+
+    const deduction = employee.deductions.find(d => d.id === deductionId);
+    if (!deduction) return;
+
+    const snapshot = createSnapshot(deduction);
+    const deductionName = deduction.name;
 
     const success = logic.deleteDeduction(employeeId, deductionId);
     if (success) {
         ui.renderDeductionsTable(employeeId);
-
-        // Trigger recalculation of all periods for this employee
         logic.recalculateAllPeriodsForEmployee(employeeId);
         await saveDataImmediate();
+
+        logAudit('Deduction Deleted', `${deductionName} from ${employee.name}`);
+
+        pushUndo(`Deleted deduction ${deductionName}`, snapshot, async (snap) => {
+            const emp = appData.employees.find(e => e.id === employeeId);
+            if (emp) {
+                emp.deductions.push(snap);
+                ui.renderDeductionsTable(employeeId);
+                logic.recalculateAllPeriodsForEmployee(employeeId);
+                await saveDataImmediate();
+                logAudit('Undo', `Restored deduction ${snap.name}`);
+            }
+        });
     }
 }
 
@@ -228,7 +280,7 @@ function handleGeneratePayStub() {
     const employeeId = document.getElementById('currentEmployee').value;
     const periodNum = document.getElementById('currentPeriod').value;
     if (!employeeId || !periodNum) {
-        alert('Please select an employee and pay period first.');
+        showToast('Please select an employee and pay period first.', 'warning');
         return;
     }
     ui.renderPayStubUI(employeeId, periodNum);
@@ -338,10 +390,26 @@ function setupEventListeners() {
         const employeeId = document.getElementById('currentEmployee').value;
         const periodNum = document.getElementById('currentPeriod').value;
         if (!employeeId || !periodNum) {
-            alert('Please select an employee and pay period first.');
+            showToast('Please select an employee and pay period first.', 'warning');
             return;
         }
         pdfExport.exportPayStubToPDF(employeeId, periodNum);
+    });
+
+    // Audit Log
+    document.getElementById('auditLogToggle').addEventListener('click', () => {
+        const body = document.getElementById('auditLogBody');
+        const arrow = document.getElementById('auditLogArrow');
+        const isHidden = body.style.display === 'none';
+        body.style.display = isHidden ? 'block' : 'none';
+        arrow.textContent = isHidden ? '\u25BC' : '\u25B6';
+        if (isHidden) ui.renderAuditLog();
+    });
+
+    document.getElementById('clearAuditLogBtn').addEventListener('click', () => {
+        clearAuditLog();
+        ui.renderAuditLog();
+        showToast('Audit log cleared.', 'success');
     });
 
     // Banking event listeners are now handled within the banking module

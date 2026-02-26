@@ -5,14 +5,14 @@ import testDataV6 from '../fixtures/test-data-v6.json';
 
 describe('migration.js', () => {
   describe('migrateData() - Full Migration Chain', () => {
-    it('should migrate v1 data to v10', () => {
+    it('should migrate v1 data to v11', () => {
       // Create a deep copy to avoid mutating the fixture
       const v1Data = JSON.parse(JSON.stringify(testDataV1));
 
       const migrated = migrateData(v1Data);
 
       // Should be at v9
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
 
       // v2 additions
       expect(migrated.settings.employeeIdPrefix).toBeDefined();
@@ -51,13 +51,13 @@ describe('migration.js', () => {
       expect(migrated.settings.minimumWeeklyHours).toBe(20);
     });
 
-    it('should migrate v6 data to v10', () => {
+    it('should migrate v6 data to v11', () => {
       const v6Data = JSON.parse(JSON.stringify(testDataV6));
 
       const migrated = migrateData(v6Data);
 
       // Should be at v9
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
 
       // v7 additions - autoSubtraction
       expect(migrated.settings.autoSubtraction).toBe(true);
@@ -68,7 +68,7 @@ describe('migration.js', () => {
       expect(migrated.employees[0].deductions[1].createdDate).toBe('2000-01-01');
     });
 
-    it('should migrate v7 data to v10 adding sutaWageBase and converting dates', () => {
+    it('should migrate v7 data to v11 adding sutaWageBase and converting dates', () => {
       const v7Data = {
         version: 7,
         settings: { companyName: 'Test', autoSubtraction: false },
@@ -79,12 +79,12 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v7Data)));
 
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
       expect(migrated.settings.autoSubtraction).toBe(false); // Should not be changed
       expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
     });
 
-    it('should migrate v8 data to v10 converting date formats', () => {
+    it('should migrate v8 data to v11 converting date formats', () => {
       const v8Data = {
         version: 8,
         settings: { companyName: 'Test', autoSubtraction: false, sutaWageBase: 30000 },
@@ -101,7 +101,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v8Data)));
 
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
       expect(migrated.settings.sutaWageBase).toBe(30000); // Should not be changed
 
       // v9: dates converted to YYYY-MM-DD
@@ -111,7 +111,7 @@ describe('migration.js', () => {
       expect(migrated.bankRegister[0].date).toBe('2024-01-15');
     });
 
-    it('should migrate v9 data to v10 adding quarterly earnings settings', () => {
+    it('should migrate v9 data to v11 adding quarterly earnings settings', () => {
       const v9Data = {
         version: 9,
         settings: { companyName: 'Test', autoSubtraction: true, sutaWageBase: 25000 },
@@ -122,7 +122,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v9Data)));
 
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
       expect(migrated.settings.quarterlyEarningsTarget).toBe(1890);
       expect(migrated.settings.minimumWeeklyHours).toBe(20);
       expect(migrated.settings.autoSubtraction).toBe(true); // Preserved
@@ -144,12 +144,12 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v9Data)));
 
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
       expect(migrated.settings.quarterlyEarningsTarget).toBe(0);
       expect(migrated.settings.minimumWeeklyHours).toBe(15);
     });
 
-    it('should not modify data already at v10', () => {
+    it('should migrate v10 data to v11 adding auditLog', () => {
       const v10Data = {
         version: 10,
         settings: { companyName: 'Test', quarterlyEarningsTarget: 2000, minimumWeeklyHours: 25 },
@@ -160,9 +160,28 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v10Data)));
 
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
       expect(migrated.settings.quarterlyEarningsTarget).toBe(2000);
       expect(migrated.settings.minimumWeeklyHours).toBe(25);
+      expect(Array.isArray(migrated.auditLog)).toBe(true);
+      expect(migrated.auditLog).toEqual([]);
+    });
+
+    it('should not modify data already at v11', () => {
+      const v11Data = {
+        version: 11,
+        settings: { companyName: 'Test', quarterlyEarningsTarget: 2000, minimumWeeklyHours: 25 },
+        employees: [],
+        payPeriods: {},
+        bankRegister: [],
+        auditLog: [{ timestamp: '2026-01-01T00:00:00Z', action: 'Test', details: 'existing' }]
+      };
+
+      const migrated = migrateData(JSON.parse(JSON.stringify(v11Data)));
+
+      expect(migrated.version).toBe(11);
+      expect(migrated.auditLog).toHaveLength(1);
+      expect(migrated.auditLog[0].action).toBe('Test');
     });
   });
 
@@ -477,7 +496,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(unversionedData);
 
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
       expect(migrated.settings.employeeIdPrefix).toBeDefined(); // v2 addition
       expect(migrated.settings.autoSubtraction).toBeDefined(); // v7 addition
       expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
@@ -495,7 +514,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v1Data);
 
       expect(migrated.employees).toEqual([]);
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
     });
 
     it('should handle empty bank register', () => {
@@ -510,7 +529,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v3Data);
 
       expect(migrated.bankRegister).toEqual([]);
-      expect(migrated.version).toBe(10);
+      expect(migrated.version).toBe(11);
     });
 
     it('should preserve all existing data during migration', () => {

@@ -8,7 +8,7 @@
 */
 // The authoritative data version number lives here in migration.js.
 // state.js and data-io.js import it from here.
-export const CURRENT_VERSION = 10;
+export const CURRENT_VERSION = 11;
 
 /**
  * Migrates a data object to a new version by adding a new setting with a default value.
@@ -234,6 +234,21 @@ function migrateToV10(data) {
 }
 
 /**
+ * Migrates from version 10 to version 11.
+ * - Adds auditLog array for tracking user actions
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV11(data) {
+    console.log("Running migration to v11...");
+
+    if (!Array.isArray(data.auditLog)) {
+        data.auditLog = [];
+    }
+
+    data.version = 11; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -270,6 +285,9 @@ export function migrateData(data) {
             // Fall-through is intentional
         case 9:
             migrateToV10(data);
+            // Fall-through is intentional
+        case 10:
+            migrateToV11(data);
             // Fall-through is intentional for future migrations
             break;
     }

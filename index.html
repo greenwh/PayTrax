@@ -139,6 +139,34 @@
                         </div>
                     </div>
 
+                    <div id="complianceSummaryWidget" class="card">
+                        <div class="card-header" style="background: linear-gradient(135deg, #6c757d 0%, #495057 100%);">Compliance Summary</div>
+                        <div class="card-body" id="complianceSummaryBody">
+                            <div class="form-grid">
+                                <div class="form-group" style="text-align: center;">
+                                    <label class="form-label" style="font-weight: 600;">Next Filing Deadline</label>
+                                    <div id="csNextDeadline" style="font-size: 1.1em;">--</div>
+                                    <div id="csDeadlineType" style="font-size: 0.85em; color: #6c757d;">--</div>
+                                </div>
+                                <div class="form-group" style="text-align: center;">
+                                    <label class="form-label" style="font-weight: 600;">YTD Wages & Taxes</label>
+                                    <div id="csYtdWages" style="font-size: 1.1em;">$0.00</div>
+                                    <div id="csYtdTaxes" style="font-size: 0.85em; color: #6c757d;">Taxes: $0.00</div>
+                                </div>
+                                <div class="form-group" style="text-align: center;">
+                                    <label class="form-label" style="font-weight: 600;">Pay Period Status</label>
+                                    <div id="csPeriodStatus" style="font-size: 1.1em;">0 of 0</div>
+                                    <div id="csPeriodLabel" style="font-size: 0.85em; color: #6c757d;">periods with hours</div>
+                                </div>
+                                <div class="form-group" style="text-align: center;">
+                                    <label class="form-label" style="font-weight: 600;">Last Backup</label>
+                                    <div id="csLastBackup" style="font-size: 1.1em;">Never</div>
+                                    <div id="csBackupLabel" style="font-size: 0.85em; color: #6c757d;">Export a backup regularly</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div style="text-align: center; margin-top: 25px;">
                         <button class="btn btn-primary" id="generatePayStubBtn">Generate Pay Stub</button>
                     </div>
@@ -455,6 +483,31 @@
                     </div>
                     <div class="alert alert-info" style="margin-top: 20px; text-align: left;">
                         <strong>Note:</strong> Importing data will overwrite all current application data. It's recommended to export a backup first. The application will automatically reload after a successful import.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header" id="auditLogToggle" style="cursor: pointer; user-select: none;">
+                    <span id="auditLogArrow">&#9654;</span> Audit Trail
+                    <span id="auditLogCount" style="float: right; font-weight: normal; font-size: 0.85em; color: #6c757d;"></span>
+                </div>
+                <div class="card-body" id="auditLogBody" style="display: none;">
+                    <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+                        <table class="report-table" id="auditLogTable">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Action</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditLogTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="text-align: center; margin-top: 15px;">
+                        <button class="btn btn-danger btn-sm" id="clearAuditLogBtn">Clear Log</button>
                     </div>
                 </div>
             </div>

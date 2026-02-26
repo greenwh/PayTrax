@@ -8,6 +8,8 @@
 */
 // js/validation.js - Comprehensive validation module for PayTrax
 
+import { showToast } from './toast.js';
+
 /**
  * Validation error class for structured error handling
  */
@@ -317,7 +319,7 @@ export function displayValidationErrors(errors, elementId = null) {
             element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     } else {
-        alert('Please correct the following errors:\n\n' + errorMessages);
+        showToast('Please correct the following errors:\n' + errorMessages, 'error');
     }
 
     return true;
