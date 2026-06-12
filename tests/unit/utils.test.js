@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { formatDate, parseDateInput, toStorageDate, fromStorageDate, toDisplayDate, fromLegacyDate, getQuarterForDate } from '../../js/utils.js';
+import { formatDate, parseDateInput, toStorageDate, fromStorageDate, toDisplayDate, fromLegacyDate, getQuarterForDate, escapeHtml } from '../../js/utils.js';
 import { appData } from '../../js/state.js';
 
 describe('utils.js', () => {
@@ -268,6 +268,30 @@ describe('utils.js', () => {
       const result = getQuarterForDate(new Date(2024, 1, 29)); // Feb 29 leap year
       expect(result.quarter).toBe('Q1');
       expect(result.end).toBe('2024-03-31');
+    });
+  });
+
+  describe('escapeHtml()', () => {
+    it('should escape all HTML special characters', () => {
+      expect(escapeHtml(`<script>alert("x&'y")</script>`))
+        .toBe('&lt;script&gt;alert(&quot;x&amp;&#39;y&quot;)&lt;/script&gt;');
+    });
+
+    it('should leave plain strings unchanged', () => {
+      expect(escapeHtml('John Doe')).toBe('John Doe');
+    });
+
+    it('should return empty string for null and undefined', () => {
+      expect(escapeHtml(null)).toBe('');
+      expect(escapeHtml(undefined)).toBe('');
+    });
+
+    it('should stringify non-string values', () => {
+      expect(escapeHtml(42)).toBe('42');
+    });
+
+    it('should escape ampersands first (no double-escaping)', () => {
+      expect(escapeHtml('&lt;')).toBe('&amp;lt;');
     });
   });
 });

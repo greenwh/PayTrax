@@ -6,7 +6,7 @@
   Licensed under the MIT License.
 */
 
-const CACHE_NAME = 'paytrax-cache-v15';
+const CACHE_NAME = 'paytrax-cache-v16';
 // This list should include all the files that make up the application's shell.
 const urlsToCache = [
   './',
@@ -28,8 +28,8 @@ const urlsToCache = [
   './js/toast.js',
   './js/undo.js',
   './js/audit.js',
-  './icons/icon-192.png', // Also cache the main icons
-  './icons/icon-512.png'
+  './docs/icons/icon-192.png', // Also cache the main icons
+  './docs/icons/icon-512.png'
 ];
 
 // Install event: opens a cache and adds the app shell files to it.
@@ -38,7 +38,9 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Opened cache');
-        return cache.addAll(urlsToCache);
+        // Add files individually so one missing asset cannot fail the
+        // entire install (cache.addAll rejects if any single URL 404s).
+        return Promise.allSettled(urlsToCache.map(url => cache.add(url)));
       })
   );
 });

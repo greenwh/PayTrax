@@ -6,6 +6,8 @@ import {
   generateW2Report,
   generate941Report,
   generate940Report,
+  compute941Data,
+  compute940Data,
   generateDateRangeEmployeeReport,
   generateDateRangeEmployerReport
 } from '../../js/logic.js';
@@ -569,5 +571,86 @@ describe('Report Data Accuracy - Cross-Validation', () => {
 
     // FUTA tax = $7,000 * 0.6% = $42
     expect(report).toContain('$42.00');
+  });
+});
+
+describe('compute941Data / compute940Data (PDF export data source)', () => {
+  let employee;
+
+  beforeEach(() => {
+    Object.assign(appData, JSON.parse(JSON.stringify(defaultAppData)));
+    appData.settings = createTestSettings({
+      taxYear: 2024,
+      payFrequency: 'bi-weekly',
+      firstPayPeriodStartDate: '2024-01-01',
+      socialSecurity: 6.2,
+      medicare: 1.45,
+      futaRate: 0.6,
+      futaWageBase: 7000
+    });
+
+    employee = createTestEmployee({
+      rate: 25,
+      fedTaxRate: 12,
+      stateTaxRate: 5,
+      localTaxRate: 2
+    });
+    appData.employees.push(employee);
+    generatePayPeriods();
+  });
+
+  it('compute941Data returns an error for an invalid period', () => {
+    expect(compute941Data('invalid').error).toContain('Invalid period');
+  });
+
+  it('compute941Data returns an error when the quarter has no data', () => {
+    expect(compute941Data('Q1 2024').error).toContain('No payroll data');
+  });
+
+  it('compute941Data returns the same numbers embedded in the HTML report', () => {
+    const hours = { regular: 80, overtime: 0, pto: 0, holiday: 0 };
+    for (let i = 1; i <= 6; i++) {
+      calculatePayFromData(employee.id, i, hours);
+    }
+
+    const data = compute941Data('Q1 2024');
+    const html = generate941Report('Q1 2024');
+
+    expect(data.error).toBeNull();
+    expect(data.line1).toBe(1);
+    expect(data.line2).toBeCloseTo(12000, 2); // 6 periods x $2000
+    expect(data.line3).toBeCloseTo(1440, 2);  // 12% federal
+    expect(data.line5a_col2).toBeCloseTo(12000 * 0.124, 2);
+    expect(data.line5c_col2).toBeCloseTo(12000 * 0.029, 2);
+
+    // The HTML report must render exactly these values
+    expect(html).toContain(`$${data.line2.toFixed(2)}`);
+    expect(html).toContain(`$${data.line3.toFixed(2)}`);
+    expect(html).toContain(`$${data.line10.toFixed(2)}`);
+    expect(html).toContain(`$${data.line13.toFixed(2)}`);
+    expect(html).toContain(`$${data.monthlyLiabilities[0].toFixed(2)}`);
+  });
+
+  it('compute940Data returns an error when the year has no data', () => {
+    expect(compute940Data('2024').error).toContain('No payroll data');
+  });
+
+  it('compute940Data returns the same numbers embedded in the HTML report', () => {
+    const hours = { regular: 80, overtime: 0, pto: 0, holiday: 0 };
+    for (let i = 1; i <= 10; i++) {
+      calculatePayFromData(employee.id, i, hours);
+    }
+
+    const data = compute940Data('2024');
+    const html = generate940Report('2024');
+
+    expect(data.error).toBeNull();
+    expect(data.line3).toBeCloseTo(20000, 2);     // 10 periods x $2000
+    expect(data.line7).toBeCloseTo(7000, 2);      // capped at FUTA wage base
+    expect(data.line8).toBeCloseTo(42, 2);        // $7000 x 0.6%
+
+    expect(html).toContain(`$${data.line3.toFixed(2)}`);
+    expect(html).toContain(`$${data.line7.toFixed(2)}`);
+    expect(html).toContain(`$${data.line8.toFixed(2)}`);
   });
 });

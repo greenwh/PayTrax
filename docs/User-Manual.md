@@ -18,6 +18,7 @@ This tab is the control center for configuring the entire application. All data 
 
 *   **Company Settings:** Configure your company's name, address, phone, and pay schedule. The `Pay Frequency` and `First Pay Period Start Date` are critical for generating the correct pay calendars.
 *   **Tax Settings:** Set the global tax rates for Social Security, Medicare, SUTA, and FUTA. Configure wage bases and thresholds (SS Wage Base, FUTA Wage Base, SUTA Wage Base, Additional Medicare Threshold). You can also define how often you need to deposit taxes for various authorities (e.g., monthly for federal, quarterly for SUTA).
+*   **⚠️ Retroactive Recalculation Warning:** Changing an employee's hourly rate or any tax rate retroactively recalculates **all** pay periods in the current tax year, including periods that have already been paid. The recalculated figures will no longer match what was actually deposited. **Export a backup before changing rates mid-year.**
 *   **Auto Bank Subtraction:** When enabled (the default), payroll calculations automatically create debit transactions in the Bank Register. Uncheck this if you prefer to manage bank transactions manually.
 *   **Employee Management:**
     *   To add a new employee, simply fill out the form and click "Save Employee."
@@ -61,6 +62,8 @@ The Reports tab helps you gather data for tax compliance. All reports can be exp
 2.  Fill in any additional fields (period, date range, employee selection).
 3.  Click `Generate Report`. A formatted table will appear with the data you need.
 4.  Click `Export to CSV` to download the report data.
+
+**Limitation — Additional Medicare Tax:** PayTrax *reports* wages above the Additional Medicare threshold on the Form 941 report, but it does **not withhold** the Additional Medicare Tax (0.9%) from employee paychecks. If any employee's wages cross the threshold, the 941 report will display a warning, the "Balance Due" line will be non-zero, and actual withholding will be short. Consult your accountant before filing in that situation.
 
 ## Banking
 

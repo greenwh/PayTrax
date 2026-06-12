@@ -9,7 +9,7 @@
 // js/reports.js - Tax reporting, W-2, 941, 940, date range reports, and CSV exports
 
 import { appData } from './state.js';
-import { parseDateInput, fromStorageDate, toDisplayDate } from './utils.js';
+import { parseDateInput, fromStorageDate, toDisplayDate, escapeHtml } from './utils.js';
 import { showToast } from './toast.js';
 
 // --- REPORTING LOGIC ---
@@ -175,7 +175,7 @@ export function generateW2Report(yearStr) {
             totals.state += p.taxes.state; totals.local += p.taxes.local;
         });
 
-        reportHTML += `<div class="card" style="margin-top:20px;"><div class="card-header" style="background: #6c757d;">${emp.name} (ID: ${emp.idNumber})</div><div class="card-body"><table class="report-table"><thead><tr><th>W-2 Box</th><th>Description</th><th>Amount</th></tr></thead><tbody>
+        reportHTML += `<div class="card" style="margin-top:20px;"><div class="card-header" style="background: #6c757d;">${escapeHtml(emp.name)} (ID: ${escapeHtml(emp.idNumber)})</div><div class="card-body"><table class="report-table"><thead><tr><th>W-2 Box</th><th>Description</th><th>Amount</th></tr></thead><tbody>
                             <tr><td>1</td><td>Wages, tips, other compensation</td><td>$${totals.gross.toFixed(2)}</td></tr>
                             <tr><td>2</td><td>Federal income tax withheld</td><td>$${totals.federal.toFixed(2)}</td></tr>
                             <tr><td>3</td><td>Social security wages</td><td>$${ssWages.toFixed(2)}</td></tr>
@@ -191,9 +191,16 @@ export function generateW2Report(yearStr) {
     return reportHTML;
 }
 
-export function generate941Report(periodStr) {
+/**
+ * Computes all Form 941 figures for a quarter (pure data, no HTML).
+ * Returns { error } when the period is invalid or has no payroll data.
+ * Shared by the HTML report and the PDF export so both show the same numbers.
+ * @param {string} periodStr - Quarter, e.g. "Q1 2025"
+ * @returns {object} 941 line data or { error }
+ */
+export function compute941Data(periodStr) {
     const { start, end, title } = parseDateInput(periodStr, 'quarterly');
-    if (!start) return `<div class="alert alert-info">Invalid period. Use format "Q1 2025".</div>`;
+    if (!start) return { error: 'Invalid period. Use format "Q1 2025".' };
 
     const year = start.getFullYear();
     const ssWageBase = appData.settings.ssWageBase;
@@ -208,7 +215,7 @@ export function generate941Report(periodStr) {
             return payDate >= start && payDate <= end && p.grossPay > 0;
         });
 
-    if (allPayPeriodsInQuarter.length === 0) return `<div class="alert alert-info">No payroll data for ${title}.</div>`;
+    if (allPayPeriodsInQuarter.length === 0) return { error: `No payroll data for ${title}.` };
 
     const employeeIdsInQuarter = [...new Set(allPayPeriodsInQuarter.map(p => {
         for (const id in appData.payPeriods) {
@@ -289,7 +296,40 @@ export function generate941Report(periodStr) {
     const line13 = totalDeposited941Taxes;
     const totalLiability = monthlyLiabilities.reduce((a, b) => a + b, 0);
 
-    return `
+    return {
+        title, year,
+        line1, line2, line3,
+        line5a_col1, line5a_col2, line5c_col1, line5c_col2, line5d_col1, line5d_col2,
+        line5e, line6, line7, line10, line12, line13,
+        monthlyLiabilities, totalLiability,
+        ssWageBase, additionalMedicareThreshold, additionalMedicareRate,
+        ficaTotalRate, medicareTotalRate,
+        error: null
+    };
+}
+
+export function generate941Report(periodStr) {
+    const data = compute941Data(periodStr);
+    if (data.error) return `<div class="alert alert-info">${data.error}</div>`;
+
+    const {
+        title, line1, line2, line3,
+        line5a_col1, line5a_col2, line5c_col1, line5c_col2, line5d_col1, line5d_col2,
+        line5e, line6, line7, line10, line12, line13,
+        monthlyLiabilities, totalLiability,
+        ssWageBase, additionalMedicareThreshold, additionalMedicareRate,
+        ficaTotalRate, medicareTotalRate
+    } = data;
+
+    // PayTrax reports Additional Medicare Tax but does not withhold it (audit F6)
+    const additionalMedicareWarning = line5d_col1 > 0
+        ? `<div class="alert alert-danger">Warning: wages above the Additional Medicare threshold were detected.
+           PayTrax does not withhold Additional Medicare Tax (${(additionalMedicareRate * 100).toFixed(1)}%); the amounts on the "Additional Medicare"
+           lines were NOT withheld from employees and the Balance Due line will be non-zero.
+           Consult your accountant before filing.</div>`
+        : '';
+
+    return `${additionalMedicareWarning}
         <h4>Quarterly Payroll Tax Report (Form 941) - ${title}</h4>
         <p class="alert alert-secondary" style="font-size: 0.9em;">This report provides data for Form 941 quarterly federal tax return. Assumes timely tax deposits per your Tax Deposit reports. Total deposits should equal total liability, resulting in \$0.00 balance due.</p>
         <h5>Quarterly Summary</h5>
@@ -334,14 +374,21 @@ export function generate941Report(periodStr) {
     `;
 }
 
-export function generate940Report(yearStr) {
+/**
+ * Computes all Form 940 figures for a year (pure data, no HTML).
+ * Returns { error } when the year has no payroll data.
+ * Shared by the HTML report and the PDF export so both show the same numbers.
+ * @param {string} yearStr - Year, e.g. "2025"
+ * @returns {object} 940 line data or { error }
+ */
+export function compute940Data(yearStr) {
     const year = parseInt(yearStr) || appData.settings.taxYear;
     const futaWageBase = appData.settings.futaWageBase;
     const futaRate = appData.settings.futaRate / 100;
 
     const allPayPeriods = [].concat.apply([], Object.values(appData.payPeriods));
     const periodsInYear = allPayPeriods.filter(p => fromStorageDate(p.payDate).getFullYear() === year && p.grossPay > 0);
-    if (periodsInYear.length === 0) return `<div class="alert alert-info">No payroll data for ${year}.</div>`;
+    if (periodsInYear.length === 0) return { error: `No payroll data for ${year}.` };
 
     let line3 = 0, line4 = 0, line5 = 0;
     let quarterlyLiabilities = {q1: 0, q2: 0, q3: 0, q4: 0};
@@ -378,6 +425,24 @@ export function generate940Report(yearStr) {
     const line12 = line8; // No adjustments
     const line13 = line12; // Assuming deposits match liability
     const line17 = line12;
+
+    return {
+        year,
+        line3, line4, line5, line6, line7, line8, line12, line13, line17,
+        quarterlyLiabilities,
+        futaWageBase, futaRate,
+        error: null
+    };
+}
+
+export function generate940Report(yearStr) {
+    const data = compute940Data(yearStr);
+    if (data.error) return `<div class="alert alert-info">${data.error}</div>`;
+
+    const {
+        year, line3, line4, line5, line6, line7, line8, line12, line13, line17,
+        quarterlyLiabilities, futaWageBase, futaRate
+    } = data;
 
     let part5HTML = '';
     if (line12 > 500) {
@@ -792,7 +857,7 @@ export function generateDateRangeEmployeeReport(startDateStr, endDateStr, employ
 
     const employeeName = employeeId === 'all' ? 'All Employees' : appData.employees.find(e => e.id === employeeId).name;
 
-    return `<h4>Custom Employee Wage Report: ${startDateStr} to ${endDateStr}</h4><h5>For: ${employeeName}</h5>
+    return `<h4>Custom Employee Wage Report: ${startDateStr} to ${endDateStr}</h4><h5>For: ${escapeHtml(employeeName)}</h5>
         <table class="report-table">
             <thead><tr><th>Pay Date</th><th>Hours</th><th>Gross</th><th>Fed Tax</th><th>State</th><th>Local</th><th>FICA</th><th>Medicare</th><th>Net</th></tr></thead>
             <tbody>${reportRows}<tr class="total-row"><td>TOTALS</td><td>${grandTotals.hours.toFixed(2)}</td><td>$${grandTotals.gross.toFixed(2)}</td><td>$${grandTotals.federal.toFixed(2)}</td><td>$${grandTotals.state.toFixed(2)}</td><td>$${grandTotals.local.toFixed(2)}</td><td>$${grandTotals.fica.toFixed(2)}</td><td>$${grandTotals.medicare.toFixed(2)}</td><td>$${grandTotals.net.toFixed(2)}</td></tr></tbody>
@@ -853,7 +918,7 @@ export function generateDateRangeEmployerReport(startDateStr, endDateStr, employ
 
     const employeeName = employeeId === 'all' ? 'All Employees' : appData.employees.find(e => e.id === employeeId).name;
 
-    return `<h4>Custom Employer Expense Report: ${startDateStr} to ${endDateStr}</h4><h5>For: ${employeeName}</h5>
+    return `<h4>Custom Employer Expense Report: ${startDateStr} to ${endDateStr}</h4><h5>For: ${escapeHtml(employeeName)}</h5>
         <table class="report-table">
             <thead><tr><th>Pay Date</th><th>Hours</th><th>Gross</th><th>ER FICA</th><th>ER Medicare</th><th>SUTA</th><th>FUTA</th><th>Total Cost</th></tr></thead>
             <tbody>${reportRows}<tr class="total-row"><td>TOTALS</td><td>${grandTotals.hours.toFixed(2)}</td><td>$${grandTotals.gross.toFixed(2)}</td><td>$${grandTotals.employerFica.toFixed(2)}</td><td>$${grandTotals.employerMedicare.toFixed(2)}</td><td>$${grandTotals.suta.toFixed(2)}</td><td>$${grandTotals.futa.toFixed(2)}</td><td>$${grandTotals.totalCost.toFixed(2)}</td></tr></tbody>

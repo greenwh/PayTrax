@@ -107,11 +107,11 @@ python -m http.server 8000
 
 **Test Framework:** Vitest with browser mode (Playwright)
 **Coverage Provider:** Istanbul (works with browser mode)
-**Test Files:** 351 tests across utils, validation, db, migration, toast, undo, audit, and integration modules
+**Test Files:** 378 tests across utils, validation, db, migration, state, toast, undo, audit, and integration modules (incl. PTO, banking purge, 941/940 compute)
 
 **Running Tests:**
 ```bash
-npm test                 # Run all 351 tests
+npm test                 # Run all 378 tests
 npm run test:watch       # Run tests in watch mode
 npm run test:ui          # Open Vitest UI dashboard
 npm run test:coverage    # Run tests with coverage report
@@ -176,7 +176,7 @@ js/audit.js       → Audit trail logging (action history, auto-prune at 500 ent
 **Data Structure:**
 ```javascript
 appData = {
-  version: 11,  // Current data version
+  version: 12,  // Current data version
   settings: {
     companyName, taxYear, payFrequency, firstPayPeriodStartDate,
     socialSecurity, medicare, sutaRate, futaRate,
@@ -188,7 +188,7 @@ appData = {
   employees: [{
     id, name, idNumber, address, rate, overtimeMultiplier, holidayMultiplier,
     fedTaxRate, stateTaxRate, localTaxRate,
-    ptoAccrualRate, ptoBalance,
+    ptoAccrualRate, ptoStartingBalance, ptoBalance,  // v12: ptoStartingBalance is user-entered; ptoBalance is computed
     taxRemainders: { federal, fica, medicare, state, local, suta, futa },
     deductions: [{ id, name, amount, type }]  // NEW in v5
   }],
@@ -196,7 +196,7 @@ appData = {
     period, startDate, endDate, payDate,
     hours: { regular, overtime, pto, holiday },
     earnings: { regular, overtime, pto, holiday },
-    grossPay, netPay, ptoAccrued,
+    grossPay, netPay, ptoAccrued, ptoBalanceAfter,  // ptoBalanceAfter NEW in v12 (running PTO balance per period)
     taxes: { federal, fica, medicare, state, local, suta, futa, total, unrounded },
     deductions: [...],  // NEW in v5
     totalDeductions     // NEW in v5
@@ -242,13 +242,13 @@ Single module import triggers entire app initialization. Service Worker is regis
 | **Undo Operations** | `undo.js` | `pushUndo()`, `createSnapshot()` for delete employee/deduction/transaction **NEW v11** |
 | **Audit Trail** | `audit.js` + `ui.js` | `logAudit()`, `getAuditLog()`, `clearAuditLog()`, `renderAuditLog()` **NEW v11** |
 | **Compliance Summary** | `ui.js` | `refreshComplianceSummary()` — filing deadlines, YTD totals, backup status **NEW v11** |
-| Backward Compatibility | `migration.js` | Handles v1→v11 data migration sequentially |
+| Backward Compatibility | `migration.js` | Handles v1→v12 data migration sequentially |
 
 ## Data Versioning & Migration
 
-**Current Version:** 11
+**Current Version:** 12
 
-Data is automatically migrated both on IndexedDB load (startup) and during JSON import. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v11 transformations are applied. `CURRENT_VERSION` is defined in `migration.js` and re-exported from `state.js`.
+Data is automatically migrated both on IndexedDB load (startup) and during JSON import. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v12 transformations are applied. `CURRENT_VERSION` is defined in `migration.js` and re-exported from `state.js`.
 
 **Version History:**
 - v1 → Initial structure
@@ -262,13 +262,15 @@ Data is automatically migrated both on IndexedDB load (startup) and during JSON 
 - v9 → Standardized all dates to YYYY-MM-DD storage format (converted from M/D/YYYY)
 - v10 → Added quarterlyEarningsTarget and minimumWeeklyHours settings
 - v11 → Added auditLog array for tracking user actions
+- v12 → Added ptoStartingBalance per employee (user-entered; existing ptoBalance value adopted as starting balance since pre-v12 calculations never modified it). `ptoBalance` and per-period `ptoAccrued`/`ptoBalanceAfter` are now derived by `recalculateAllPeriodsForEmployee()`.
 
 ## PWA & Offline Support
 
 **Service Worker (`sw.js`):**
 - Cache-first strategy with network fallback
-- Cache name: `paytrax-cache-v15`
-- All app assets are cached for offline functionality
+- Cache name: `paytrax-cache-v16`
+- All app assets are cached for offline functionality; icon paths point to `docs/icons/` (there is no root `icons/` directory)
+- Install uses `Promise.allSettled` per-URL so one missing asset cannot fail the whole install
 - Full app works without internet connection
 
 **Web App Manifest (`manifest.json`):**
@@ -311,7 +313,7 @@ PayTrax now has comprehensive automated testing with Vitest. Run tests before an
 
 **Quick Start:**
 ```bash
-npm test              # Run all tests (301 tests pass)
+npm test              # Run all tests (378 tests pass)
 npm run test:coverage # Check coverage and identify gaps
 ```
 
@@ -367,8 +369,8 @@ For UI interactions and visual verification:
 - **Critical Requirement:** Pay periods MUST be calculated in strict chronological sequence (Period 1→2→3...)
 - **Automatic Safeguards:**
   - `generatePayPeriods()` triggers sequential recalculation after settings changes
-  - `calculatePay()` detects editing of earlier periods and triggers full recalculation
-  - `recalculateAllPeriodsForEmployee()` resets remainders and processes periods sequentially
+  - `calculatePayFromData()` **always** runs the full sequential recalculation from Period 1 (since June 2026 — single-period recalc consumed its own remainder output and drifted; see audit F4)
+  - `recalculateAllPeriodsForEmployee()` resets remainders, derives PTO from `ptoStartingBalance`, and processes periods sequentially; it is the sole owner of `employee.ptoBalance` and `period.ptoAccrued`/`ptoBalanceAfter`
 - **Rounding Method:** Uses standard currency rounding (`Math.round(x * 100) / 100`) NOT banker's rounding
 - See `logic.js::calculatePay()` and `logic.js::recalculateAllPeriodsForEmployee()` for implementation
 
@@ -389,6 +391,12 @@ For UI interactions and visual verification:
 - **Immediate save:** `saveDataImmediate()` for critical operations (employee changes, settings, purge)
 - **Dirty tracking:** `isDirty()` checks for unsaved changes; `beforeunload` warns users
 - **Data validation:** `loadData()` validates structural integrity on startup
+
+### Additional Medicare Tax — reported, not withheld
+- PayTrax reports wages over `additionalMedicareThreshold` on the Form 941 report (and shows a prominent warning when non-zero) but does **not** withhold the 0.9% Additional Medicare Tax from paychecks. Implementing withholding is a deliberate non-goal at current wage levels; see audit F6 (June 2026).
+
+### Retroactive Recalculation (design decision)
+- Changing an employee's hourly rate or any tax rate recalculates ALL periods in the tax year on the next recalc/app load, including already-paid ones. Documented in the User Manual; effective-dated rates are a possible future feature. Advise exporting a backup before mid-year rate changes.
 
 ### Git & Deployment
 - Clean git history, ready for GitHub Pages

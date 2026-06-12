@@ -307,6 +307,12 @@ describe('validation.js', () => {
       const errors = validateSettings({ ...validSettings, ssWageBase: 0 });
       expect(errors.length).toBeGreaterThan(0);
     });
+
+    it('should reject NaN values so they can never be persisted (audit F5)', () => {
+      const errors = validateSettings({ ...validSettings, socialSecurity: NaN });
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].field).toBe('Social Security Rate');
+    });
   });
 
   describe('validateTransaction()', () => {

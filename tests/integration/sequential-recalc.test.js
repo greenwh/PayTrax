@@ -102,6 +102,25 @@ describe('Sequential Recalculation (CRITICAL)', () => {
     expect(employee.taxRemainders.fica).toBeCloseTo(remaindersAfter5.fica, 10);
   });
 
+  it('should produce identical taxes and remainders when recalculating the latest period with identical hours (audit F4)', () => {
+    // Calculate periods 1 and 2
+    calculatePayFromData(employee.id, 1, standardHours);
+    calculatePayFromData(employee.id, 2, standardHours);
+
+    // Snapshot period 2's taxes and the employee's remainder state
+    const taxesSnapshot = JSON.parse(JSON.stringify(
+      appData.payPeriods[employee.id].find(p => p.period === 2).taxes
+    ));
+    const remaindersSnapshot = JSON.parse(JSON.stringify(employee.taxRemainders));
+
+    // Re-save period 2 with identical hours — must be a no-op
+    calculatePayFromData(employee.id, 2, standardHours);
+
+    const period2 = appData.payPeriods[employee.id].find(p => p.period === 2);
+    expect(period2.taxes).toEqual(taxesSnapshot);
+    expect(employee.taxRemainders).toEqual(remaindersSnapshot);
+  });
+
   it('should not recalculate backward when editing last period', () => {
     // Calculate periods 1-10
     for (let i = 1; i <= 10; i++) {

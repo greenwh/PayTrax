@@ -8,7 +8,7 @@
 */
 import { appData } from './state.js';
 import * as logic from './logic.js';
-import { formatDate, parseDateInput, fromStorageDate, toDisplayDate, getQuarterForDate } from './utils.js';
+import { formatDate, parseDateInput, fromStorageDate, toDisplayDate, getQuarterForDate, escapeHtml } from './utils.js';
 import { getAuditLog } from './audit.js';
 
 // --- UI & TAB MANAGEMENT ---
@@ -220,8 +220,8 @@ export function renderEmployeeFormForEdit(employeeId) {
     document.getElementById('localTax').value = employee.localTaxRate;
     document.getElementById('ptoAccrualRate').value = employee.ptoAccrualRate;
     // Fixing long decimals in PTO
-	//document.getElementById('ptoBalance').value = employee.ptoBalance;
-	document.getElementById('ptoBalance').value = employee.ptoBalance.toFixed(2);
+	// The form edits the starting balance; ptoBalance is the computed current balance
+	document.getElementById('ptoBalance').value = (employee.ptoStartingBalance || 0).toFixed(2);
     document.getElementById('deleteEmployeeBtn').style.display = 'inline-block';
 
     // Show and populate deductions section
@@ -253,7 +253,7 @@ export function renderDeductionsTable(employeeId) {
         const effectiveDate = ded.createdDate || 'N/A';
 
         row.innerHTML = `
-            <td>${ded.name}</td>
+            <td>${escapeHtml(ded.name)}</td>
             <td>${typeLabel}</td>
             <td>${typeDisplay}</td>
             <td>${effectiveDate}</td>
@@ -335,7 +335,7 @@ export function renderPayStubUI(employeeId, periodNum) {
         period.deductions.forEach(ded => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${ded.name}</td>
+                <td>${escapeHtml(ded.name)}</td>
                 <td class="text-right">$${ded.calculatedAmount.toFixed(2)}</td>
             `;
             deductionsBody.appendChild(row);
@@ -344,9 +344,10 @@ export function renderPayStubUI(employeeId, periodNum) {
         deductionsSection.style.display = 'none';
     }
 
-    const ptoUsed = period.hours.pto;
-    const ptoEarned = period.ptoAccrued;
-    const ptoEnd = employee.ptoBalance;
+    // Use period-level values so historical stubs are correct, not just the latest
+    const ptoUsed = period.hours.pto || 0;
+    const ptoEarned = period.ptoAccrued || 0;
+    const ptoEnd = period.ptoBalanceAfter ?? employee.ptoBalance;
     const ptoBegin = (ptoEnd - ptoEarned) + ptoUsed;
 
     document.getElementById('ptoBegin').textContent = ptoBegin.toFixed(2);
@@ -443,22 +444,22 @@ export function renderReportUI() {
             if (reportType === 'annual') {
                 reportHTML = logic.generateW2Report(periodStr);
                 exportButtons = `
-                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="w2" data-period="${periodStr}">Export to CSV</button>
-                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="w2" data-period="${periodStr}">Export to PDF</button>
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="w2" data-period="${escapeHtml(periodStr)}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="w2" data-period="${escapeHtml(periodStr)}">Export to PDF</button>
                 `;
             }
             if (reportType === '941') {
                 reportHTML = logic.generate941Report(periodStr);
                 exportButtons = `
-                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="941" data-period="${periodStr}">Export to CSV</button>
-                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="941" data-period="${periodStr}">Export to PDF</button>
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="941" data-period="${escapeHtml(periodStr)}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="941" data-period="${escapeHtml(periodStr)}">Export to PDF</button>
                 `;
             }
             if (reportType === '940') {
                 reportHTML = logic.generate940Report(periodStr);
                 exportButtons = `
-                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="940" data-period="${periodStr}">Export to CSV</button>
-                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="940" data-period="${periodStr}">Export to PDF</button>
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="940" data-period="${escapeHtml(periodStr)}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="940" data-period="${escapeHtml(periodStr)}">Export to PDF</button>
                 `;
             }
             break;
@@ -477,15 +478,15 @@ export function renderReportUI() {
             if (reportType === 'daterange-employee') {
                 reportHTML = logic.generateDateRangeEmployeeReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
                 exportButtons = `
-                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employee" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}">Export to CSV</button>
-                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="daterange" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}" data-subtype="employee">Export to PDF</button>
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employee" data-start="${escapeHtml(startDateRangeStr)}" data-end="${escapeHtml(endDateRangeStr)}" data-employee="${escapeHtml(reportEmployeeId)}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="daterange" data-start="${escapeHtml(startDateRangeStr)}" data-end="${escapeHtml(endDateRangeStr)}" data-employee="${escapeHtml(reportEmployeeId)}" data-subtype="employee">Export to PDF</button>
                 `;
             }
             if (reportType === 'daterange-employer') {
                 reportHTML = logic.generateDateRangeEmployerReport(startDateRangeStr, endDateRangeStr, reportEmployeeId);
                 exportButtons = `
-                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employer" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}">Export to CSV</button>
-                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="daterange" data-start="${startDateRangeStr}" data-end="${endDateRangeStr}" data-employee="${reportEmployeeId}" data-subtype="employer">Export to PDF</button>
+                    <button class="btn btn-success" id="exportReportCSVBtn" data-report-type="daterange-employer" data-start="${escapeHtml(startDateRangeStr)}" data-end="${escapeHtml(endDateRangeStr)}" data-employee="${escapeHtml(reportEmployeeId)}">Export to CSV</button>
+                    <button class="btn btn-primary" id="exportReportPDFBtn" data-report-type="daterange" data-start="${escapeHtml(startDateRangeStr)}" data-end="${escapeHtml(endDateRangeStr)}" data-employee="${escapeHtml(reportEmployeeId)}" data-subtype="employer">Export to PDF</button>
                 `;
             }
             break;
@@ -665,7 +666,7 @@ function renderAllEmployeesQuarterlySummary() {
         }
 
         html += `<tr>`;
-        html += `<td>${emp.name}</td>`;
+        html += `<td>${escapeHtml(emp.name)}</td>`;
         html += `<td>$${status.quarterGross.toFixed(2)}</td>`;
         html += `<td>$${status.target.toFixed(2)}</td>`;
         html += `<td>${status.percentComplete}%</td>`;

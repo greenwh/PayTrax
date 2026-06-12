@@ -32,21 +32,26 @@ export function saveEmployeeFromForm() {
         stateTaxRate: parseFloat(document.getElementById('stateTax').value) || 0,
         localTaxRate: parseFloat(document.getElementById('localTax').value) || 0,
         ptoAccrualRate: parseFloat(document.getElementById('ptoAccrualRate').value) || 0,
-        ptoBalance: parseFloat(document.getElementById('ptoBalance').value) || 0,
+        // The form edits the starting balance; ptoBalance is computed from it
+        // by recalculateAllPeriodsForEmployee.
+        ptoStartingBalance: parseFloat(document.getElementById('ptoBalance').value) || 0,
     };
 
     if (employeeId) {
         const index = appData.employees.findIndex(e => e.id === employeeId);
         if (index > -1) {
-            // When editing, preserve the existing remainders and deductions to not lose data
+            // When editing, preserve the existing remainders, deductions, and
+            // computed PTO balance to not lose data (all recomputed on next recalc)
             const existingRemainders = appData.employees[index].taxRemainders || { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
             const existingDeductions = appData.employees[index].deductions || [];
-            appData.employees[index] = { ...employeeData, taxRemainders: existingRemainders, deductions: existingDeductions };
+            const existingPtoBalance = appData.employees[index].ptoBalance || 0;
+            appData.employees[index] = { ...employeeData, taxRemainders: existingRemainders, deductions: existingDeductions, ptoBalance: existingPtoBalance };
         }
     } else {
         // For a new employee, create a fresh taxRemainders object and empty deductions array
         const newEmployee = {
             ...employeeData,
+            ptoBalance: employeeData.ptoStartingBalance,
             taxRemainders: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 },
             deductions: []
         };

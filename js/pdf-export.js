@@ -11,6 +11,7 @@
 import { appData } from './state.js';
 import { fromStorageDate, toDisplayDate } from './utils.js';
 import { showToast } from './toast.js';
+import { compute941Data, compute940Data } from './reports.js';
 
 /**
  * Exports pay stub to PDF
@@ -173,9 +174,10 @@ export function exportPayStubToPDF(employeeId, periodNum) {
         summaryY = 20; // Start from top of new page
     }
 
+    // Use period-level values so historical stubs are correct, not just the latest
     const ptoUsed = period.hours.pto || 0;
     const ptoEarned = period.ptoAccrued || 0;
-    const ptoEnd = employee.ptoBalance || 0;
+    const ptoEnd = period.ptoBalanceAfter ?? (employee.ptoBalance || 0);
     const ptoBegin = (ptoEnd - ptoEarned) + ptoUsed;
 
     doc.setFontSize(11);
@@ -333,6 +335,12 @@ export function exportW2ReportToPDF(yearStr) {
  * @param {string} periodStr - The quarter (e.g., "Q1 2025")
  */
 export function export941ReportToPDF(periodStr) {
+    const data = compute941Data(periodStr);
+    if (data.error) {
+        showToast(data.error, 'warning');
+        return;
+    }
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
@@ -342,24 +350,26 @@ export function export941ReportToPDF(periodStr) {
     doc.setFontSize(10);
     doc.text(appData.settings.companyName || 'Company Name', 105, 28, { align: 'center' });
 
-    // Note: We'll need to recalculate the 941 data here
-    // For simplicity, I'll create a summary table
-    const ssWageBase = appData.settings.ssWageBase;
-    const additionalMedicareThreshold = appData.settings.additionalMedicareThreshold || 200000;
-    const ficaTotalRate = (appData.settings.socialSecurity || 6.2) / 100 * 2;
-    const medicareTotalRate = (appData.settings.medicare || 1.45) / 100 * 2;
-
     const tableData = [
         ['Description', 'Amount'],
         ['Report Period', periodStr],
-        ['Total Wages, Tips, and Other Compensation', '(calculated)'],
-        ['Federal Income Tax Withheld', '(calculated)'],
-        [`Social Security Wages (limit: $${ssWageBase.toLocaleString()})`, '(calculated)'],
-        [`Social Security Tax (${(ficaTotalRate * 100).toFixed(1)}%)`, '(calculated)'],
-        ['Medicare Wages & Tips', '(calculated)'],
-        [`Medicare Tax (${(medicareTotalRate * 100).toFixed(2)}%)`, '(calculated)'],
-        [`Wages Subject to Additional Medicare (over $${additionalMedicareThreshold.toLocaleString()})`, '(calculated)'],
-        ['Total Taxes', '(calculated)']
+        ['Number of Employees Who Received Compensation', data.line1.toString()],
+        ['Total Wages, Tips, and Other Compensation', `$${data.line2.toFixed(2)}`],
+        ['Federal Income Tax Withheld', `$${data.line3.toFixed(2)}`],
+        [`Social Security Wages (limit: $${data.ssWageBase.toLocaleString()})`, `$${data.line5a_col1.toFixed(2)}`],
+        [`Social Security Tax (${(data.ficaTotalRate * 100).toFixed(1)}%)`, `$${data.line5a_col2.toFixed(2)}`],
+        ['Medicare Wages & Tips', `$${data.line5c_col1.toFixed(2)}`],
+        [`Medicare Tax (${(data.medicareTotalRate * 100).toFixed(2)}%)`, `$${data.line5c_col2.toFixed(2)}`],
+        [`Wages Subject to Additional Medicare (over $${data.additionalMedicareThreshold.toLocaleString()})`, `$${data.line5d_col1.toFixed(2)}`],
+        ['Total Social Security and Medicare Taxes', `$${data.line5e.toFixed(2)}`],
+        ['Adjustment for Fractions of Cents', `$${data.line7.toFixed(2)}`],
+        ['Total Taxes After Adjustments', `$${data.line10.toFixed(2)}`],
+        ['Total Deposits for This Quarter', `$${data.line13.toFixed(2)}`],
+        ['Balance Due (overpayment shown as negative)', `$${(data.line12 - data.line13).toFixed(2)}`],
+        ['Month 1 Tax Liability', `$${data.monthlyLiabilities[0].toFixed(2)}`],
+        ['Month 2 Tax Liability', `$${data.monthlyLiabilities[1].toFixed(2)}`],
+        ['Month 3 Tax Liability', `$${data.monthlyLiabilities[2].toFixed(2)}`],
+        ['Total Quarterly Liability', `$${data.totalLiability.toFixed(2)}`]
     ];
 
     doc.autoTable({
@@ -381,9 +391,13 @@ export function export941ReportToPDF(periodStr) {
  * @param {string} yearStr - The tax year
  */
 export function export940ReportToPDF(yearStr) {
-    const year = parseInt(yearStr) || appData.settings.taxYear;
-    const futaWageBase = appData.settings.futaWageBase;
-    const futaRate = appData.settings.futaRate / 100;
+    const data = compute940Data(yearStr);
+    if (data.error) {
+        showToast(data.error, 'warning');
+        return;
+    }
+
+    const { year, futaWageBase, futaRate } = data;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -397,10 +411,18 @@ export function export940ReportToPDF(yearStr) {
     const tableData = [
         ['Description', 'Amount'],
         ['Tax Year', year.toString()],
-        ['Total Payments to Employees', '(calculated)'],
-        [`Payments Exceeding FUTA Wage Base ($${futaWageBase.toLocaleString()})`, '(calculated)'],
-        ['Taxable FUTA Wages', '(calculated)'],
-        [`FUTA Tax (${(futaRate * 100).toFixed(1)}%)`, '(calculated)']
+        ['Total Payments to Employees', `$${data.line3.toFixed(2)}`],
+        ['Payments Exempt from FUTA Tax', `$${data.line4.toFixed(2)}`],
+        [`Payments Exceeding FUTA Wage Base ($${futaWageBase.toLocaleString()})`, `$${data.line5.toFixed(2)}`],
+        ['Total Exempt and Excess Payments', `$${data.line6.toFixed(2)}`],
+        ['Taxable FUTA Wages', `$${data.line7.toFixed(2)}`],
+        [`FUTA Tax (${(futaRate * 100).toFixed(1)}%)`, `$${data.line8.toFixed(2)}`],
+        ['Total FUTA Tax After Adjustments', `$${data.line12.toFixed(2)}`],
+        ['FUTA Tax Deposited for the Year', `$${data.line13.toFixed(2)}`],
+        ['Q1 Liability', `$${data.quarterlyLiabilities.q1.toFixed(2)}`],
+        ['Q2 Liability', `$${data.quarterlyLiabilities.q2.toFixed(2)}`],
+        ['Q3 Liability', `$${data.quarterlyLiabilities.q3.toFixed(2)}`],
+        ['Q4 Liability', `$${data.quarterlyLiabilities.q4.toFixed(2)}`]
     ];
 
     doc.autoTable({

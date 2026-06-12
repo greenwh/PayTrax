@@ -90,20 +90,8 @@ function handlePurgeConfirm() {
         return;
     }
 
-    const count = getPurgeableCount(cutoffDate);
+    const { count, openingBalance } = getPurgePreview(cutoffDate);
     if (confirm(`Are you sure you want to permanently delete ${count} reconciled transaction(s) on or before ${cutoffDate}? This cannot be undone.`)) {
-        // Calculate the opening balance before purging for the message
-        const cutoffDateObj = new Date(cutoffDate + 'T23:59:59');
-        const sortedRegister = [...appData.bankRegister].sort((a, b) => fromStorageDate(a.date) - fromStorageDate(b.date));
-        let openingBalance = 0;
-        for (const t of sortedRegister) {
-            if (fromStorageDate(t.date) <= cutoffDateObj) {
-                openingBalance += t.credit - t.debit;
-            } else {
-                break;
-            }
-        }
-
         const purgedCount = purgeTransactions(cutoffDate);
         hidePurgeModal();
 
@@ -349,30 +337,34 @@ function saveTransactionEdit(transId) {
     saveData();
 }
 
-function purgeTransactions(cutoffDateStr) {
+/**
+ * Computes what a purge at the given cutoff would remove: the count of
+ * reconciled transactions on or before the cutoff, and the net opening
+ * balance of exactly those transactions. The opening balance must equal the
+ * net of the transactions actually removed so the register total is
+ * identical before and after the purge (audit F3).
+ * @param {string} cutoffDateStr - Cutoff date (YYYY-MM-DD)
+ * @returns {{count: number, openingBalance: number}}
+ */
+export function getPurgePreview(cutoffDateStr) {
+    const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
+    const txs = appData.bankRegister.filter(t =>
+        t.reconciled && fromStorageDate(t.date) <= cutoffDate);
+    const openingBalance = txs.reduce((sum, t) => sum + t.credit - t.debit, 0);
+    return { count: txs.length, openingBalance };
+}
+
+export function purgeTransactions(cutoffDateStr) {
     const originalCount = appData.bankRegister.length;
     const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
 
-    // Sort chronologically to calculate running balance
-    const sortedRegister = [...appData.bankRegister].sort((a, b) => fromStorageDate(a.date) - fromStorageDate(b.date));
+    // Sum only the transactions actually being removed — unreconciled
+    // pre-cutoff transactions stay in the register and must not be baked
+    // into the opening balance (audit F3)
+    const { count, openingBalance } = getPurgePreview(cutoffDateStr);
 
-    // Find transactions to purge
-    const txsToPurge = sortedRegister.filter(t =>
-        t.reconciled && fromStorageDate(t.date) <= cutoffDate
-    );
-
-    if (txsToPurge.length === 0) {
+    if (count === 0) {
         return 0;
-    }
-
-    // Calculate running balance up through and including purge date
-    let openingBalance = 0;
-    for (const t of sortedRegister) {
-        if (fromStorageDate(t.date) <= cutoffDate) {
-            openingBalance += t.credit - t.debit;
-        } else {
-            break;
-        }
     }
 
     // Calculate date for opening balance (one day after purge date)
@@ -404,11 +396,6 @@ function purgeTransactions(cutoffDateStr) {
     }
 
     return originalCount - appData.bankRegister.length + (openingBalance !== 0 ? 1 : 0);
-}
-
-function getPurgeableCount(cutoffDateStr) {
-    const cutoffDate = new Date(cutoffDateStr + 'T23:59:59');
-    return appData.bankRegister.filter(t => fromStorageDate(t.date) <= cutoffDate && t.reconciled === true).length;
 }
 
 function getBankProjections() {

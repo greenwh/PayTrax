@@ -42,12 +42,24 @@ function handleTabClick(event) {
  * Handles changes to any of the settings fields.
  */
 async function handleSettingsChange() {
+    const settingsBefore = JSON.parse(JSON.stringify(appData.settings));
     logic.updateSettingsFromUI();
 
-    // Validate settings after reading from UI
+    // Validate settings after reading from UI — invalid settings must not be
+    // recalculated against or persisted (audit F5). During initial setup
+    // (no employees, no start date yet) validation is warn-only so the user
+    // can fill in the form incrementally.
     const settingsErrors = validation.validateSettings(appData.settings);
     if (settingsErrors.length > 0) {
-        console.warn('Settings validation warnings:', settingsErrors);
+        const isInitialSetup = appData.employees.length === 0 && !appData.settings.firstPayPeriodStartDate;
+        if (isInitialSetup) {
+            console.warn('Settings validation warnings (initial setup):', settingsErrors);
+        } else {
+            validation.displayValidationErrors(settingsErrors);
+            appData.settings = settingsBefore; // roll back the in-memory state
+            ui.displaySettings();              // restore the form to the last valid state
+            return;
+        }
     }
 
     logic.generatePayPeriods();
@@ -96,8 +108,9 @@ function handleHoursChange() {
 
     const hoursErrors = validation.validateHours(hours);
     if (hoursErrors.length > 0) {
-        // Show warning but allow calculation (non-blocking)
-        console.warn('Hours validation warnings:', hoursErrors);
+        // Invalid hours (negative, >168 total) must not reach the engine (audit F13)
+        validation.displayValidationErrors(hoursErrors);
+        return;
     }
 
     logic.calculatePay();
@@ -147,8 +160,14 @@ async function handleEmployeeFormSubmit(event) {
         return; // Prevent saving if validation fails
     }
 
-    const isEdit = !!document.getElementById('employeeId').value;
+    const editedEmployeeId = document.getElementById('employeeId').value;
+    const isEdit = !!editedEmployeeId;
     logic.saveEmployeeFromForm();
+    if (isEdit) {
+        // Re-derive PTO and remainders so a changed starting balance or rate
+        // takes effect immediately
+        logic.recalculateAllPeriodsForEmployee(editedEmployeeId);
+    }
     ui.populateEmployeeDropdowns();
     ui.resetEmployeeForm();
     await saveDataImmediate();
@@ -313,7 +332,10 @@ function setupEventListeners() {
     document.getElementById('newEmployeeBtn').addEventListener('click', ui.resetEmployeeForm);
     document.getElementById('deleteEmployeeBtn').addEventListener('click', handleDeleteEmployee);
     document.getElementById('importDataBtn').addEventListener('click', importData);
-    document.getElementById('exportDataBtn').addEventListener('click', exportData);
+    document.getElementById('exportDataBtn').addEventListener('click', () => {
+        exportData();
+        ui.refreshComplianceSummary();
+    });
 
     // Deductions Management
     document.getElementById('addDeductionBtn').addEventListener('click', handleAddDeduction);

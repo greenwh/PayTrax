@@ -8,7 +8,7 @@
 */
 // js/data-io.js
 
-import { appData, saveDataImmediate, replaceState, CURRENT_VERSION } from './state.js';
+import { appData, saveData, saveDataImmediate, replaceState, CURRENT_VERSION } from './state.js';
 import { migrateData } from './migration.js';
 import { showToast } from './toast.js';
 import { logAudit } from './audit.js';
@@ -98,6 +98,9 @@ export function exportData() {
         URL.revokeObjectURL(url);
 
         logAudit('Data Exported', `Backup created: ${link.download}`);
+
+        // Persist lastBackupDate so "Last backup" survives a reload (audit F10)
+        saveData();
 
     } catch (error) {
         console.error("Failed to export data:", error);

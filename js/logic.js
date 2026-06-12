@@ -18,7 +18,7 @@ import { calculateDeductions } from './employees.js';
 
 // Re-export from sub-modules so existing `import * as logic` continues to work
 export { saveEmployeeFromForm, deleteEmployee, addDeduction, updateDeduction, deleteDeduction, calculateDeductions } from './employees.js';
-export { generateTaxDepositReportFromData, generateTaxDepositReport, generateW2Report, generate941Report, generate940Report, exportW2ReportToCSV, export941ReportToCSV, export940ReportToCSV, exportDateRangeEmployeeReportToCSV, exportDateRangeEmployerReportToCSV, generateDateRangeEmployeeReport, generateDateRangeEmployerReport } from './reports.js';
+export { generateTaxDepositReportFromData, generateTaxDepositReport, generateW2Report, generate941Report, generate940Report, compute941Data, compute940Data, exportW2ReportToCSV, export941ReportToCSV, export940ReportToCSV, exportDateRangeEmployeeReportToCSV, exportDateRangeEmployerReportToCSV, generateDateRangeEmployeeReport, generateDateRangeEmployerReport } from './reports.js';
 
 // --- PAYROLL & PAY PERIODS ---
 
@@ -149,6 +149,10 @@ export function recalculateAllPeriodsForEmployee(employeeId) {
     // Sort periods by period number to ensure sequential processing
     const sortedPeriods = periods.slice().sort((a, b) => a.period - b.period);
 
+    // Derive PTO from scratch alongside the remainder reset (audit F1)
+    let ptoBalance = employee.ptoStartingBalance || 0;
+    const periodsInYear = sortedPeriods.length;
+
     // Recalculate each period in sequence
     sortedPeriods.forEach(period => {
         const totalHours = period.hours ? Object.values(period.hours).reduce((a, b) => a + b, 0) : 0;
@@ -156,8 +160,21 @@ export function recalculateAllPeriodsForEmployee(employeeId) {
         // Only recalculate periods that have hours entered
         if (totalHours > 0) {
             recalculatePeriod(employeeId, period.period);
+            // Accrue only on periods with worked (regular/overtime) hours
+            const worked = (period.hours.regular || 0) + (period.hours.overtime || 0) > 0;
+            const accrued = worked && periodsInYear > 0
+                ? employee.ptoAccrualRate / periodsInYear
+                : 0;
+            ptoBalance = ptoBalance + accrued - (period.hours.pto || 0);
+            period.ptoAccrued = accrued;
+            period.ptoBalanceAfter = Math.round(ptoBalance * 100) / 100;
+        } else {
+            period.ptoAccrued = 0;
+            period.ptoBalanceAfter = Math.round(ptoBalance * 100) / 100;
         }
     });
+
+    employee.ptoBalance = Math.round(ptoBalance * 100) / 100;
 }
 
 /**
@@ -257,26 +274,12 @@ export function recalculatePeriod(employeeId, periodNum) {
 
     const netPay = grossPay - employeeTaxes - totalDeductions;
 
-    // PTO Calculation (preserve existing PTO logic)
-    const originalPtoUsed = period.hours.pto || 0;
-    const originalPtoAccrued = period.ptoAccrued || 0;
-    let ptoAccruedThisPeriod = 0;
-    let currentPtoBalance = (employee.ptoBalance + originalPtoUsed) - originalPtoAccrued;
-    const totalOriginalHours = Object.values(period.hours).reduce((a, b) => a + b, 0);
-
-    if (totalOriginalHours === 0 && (hours.regular > 0 || hours.overtime > 0)) {
-        const periodsInYear = (appData.payPeriods[employeeId] || []).length;
-        if (periodsInYear > 0) ptoAccruedThisPeriod = employee.ptoAccrualRate / periodsInYear;
-    } else {
-        ptoAccruedThisPeriod = originalPtoAccrued;
-    }
-    appData.employees[employeeIndex].ptoBalance = parseFloat(((currentPtoBalance + ptoAccruedThisPeriod) - hours.pto).toFixed(2));
-
     // Update Period Data
+    // (PTO accrual/balance is owned by recalculateAllPeriodsForEmployee, which
+    // derives it sequentially from ptoStartingBalance — see audit F1.)
     period.earnings = earnings;
     period.grossPay = grossPay;
     period.netPay = netPay;
-    period.ptoAccrued = ptoAccruedThisPeriod;
     period.taxes = { ...rounded, total: employeeTaxes, unrounded };
     period.deductions = deductions;
     period.totalDeductions = totalDeductions;
@@ -319,7 +322,11 @@ export function updateHoursFromPeriod(employeeId, periodNum) {
     document.getElementById('ptoHours').value = period.hours.pto > 0 ? period.hours.pto : '';
     document.getElementById('holidayHours').value = period.hours.holiday > 0 ? period.hours.holiday : '';
 
-    return true; // Indicate that a recalculation should happen
+    // Only request a recalculation when the period actually has hours —
+    // merely browsing an empty period must not mutate data, save, or write
+    // audit entries (audit F12)
+    const totalHours = period.hours ? Object.values(period.hours).reduce((a, b) => a + b, 0) : 0;
+    return totalHours > 0;
 }
 
 /**
@@ -350,20 +357,10 @@ export function calculatePayFromData(employeeId, periodNum, hours) {
         holiday: parseFloat(hours.holiday) || 0,
     };
 
-    // Detect if we're editing an earlier period with subsequent periods already calculated
-    const hasLaterPeriodsWithData = periods.some(p => {
-        const laterPeriod = p.period > periodNum;
-        const hasHours = p.hours && Object.values(p.hours).reduce((a, b) => a + b, 0) > 0;
-        return laterPeriod && hasHours;
-    });
-
-    // If editing an earlier period, recalculate everything from Period 1 forward
-    if (hasLaterPeriodsWithData) {
-        recalculateAllPeriodsForEmployee(employeeId);
-    } else {
-        // Otherwise, just calculate this single period
-        recalculatePeriod(employeeId, periodNum);
-    }
+    // Always recalculate from Period 1 so tax remainders and PTO are derived
+    // from a clean state — a single-period recalc consumes its own previous
+    // remainder output and drifts (audit F4).
+    recalculateAllPeriodsForEmployee(employeeId);
 
     // Return the updated period for testing
     return appData.payPeriods[employeeId].find(p => p.period == periodNum);
@@ -426,22 +423,27 @@ export function getPayStubData(employeeId, periodNum) {
  * Updates the settings in the appData object from the UI form fields.
  */
 export function updateSettingsFromUI() {
+    // A transiently empty/invalid numeric field must never inject NaN into
+    // saved settings — fall back to the current stored value (audit F5)
+    const num = (v, fallback) => { const n = parseFloat(v); return isNaN(n) ? fallback : n; };
+    const int = (v, fallback) => { const n = parseInt(v); return isNaN(n) ? fallback : n; };
+
     appData.settings.companyName = document.getElementById('companyName').value;
-    appData.settings.taxYear = parseInt(document.getElementById('taxYear').value);
+    appData.settings.taxYear = int(document.getElementById('taxYear').value, appData.settings.taxYear);
     appData.settings.payFrequency = document.getElementById('payFrequency').value;
     appData.settings.firstPayPeriodStartDate = document.getElementById('firstPayPeriodStartDate').value;
-    appData.settings.daysUntilPayday = parseInt(document.getElementById('daysUntilPayday').value);
+    appData.settings.daysUntilPayday = int(document.getElementById('daysUntilPayday').value, appData.settings.daysUntilPayday);
     appData.settings.companyAddress = document.getElementById('companyAddress').value;
     appData.settings.companyPhone = document.getElementById('companyPhone').value;
-    appData.settings.socialSecurity = parseFloat(document.getElementById('socialSecurity').value);
-    appData.settings.medicare = parseFloat(document.getElementById('medicare').value);
-    appData.settings.sutaRate = parseFloat(document.getElementById('sutaRate').value);
-    appData.settings.futaRate = parseFloat(document.getElementById('futaRate').value);
-    appData.settings.ssWageBase = parseFloat(document.getElementById('ssWageBase').value);
-    appData.settings.futaWageBase = parseFloat(document.getElementById('futaWageBase').value);
-    appData.settings.sutaWageBase = parseFloat(document.getElementById('sutaWageBase').value);
-    appData.settings.additionalMedicareThreshold = parseFloat(document.getElementById('additionalMedicareThreshold').value);
-    appData.settings.additionalMedicareRate = parseFloat(document.getElementById('additionalMedicareRate').value);
+    appData.settings.socialSecurity = num(document.getElementById('socialSecurity').value, appData.settings.socialSecurity);
+    appData.settings.medicare = num(document.getElementById('medicare').value, appData.settings.medicare);
+    appData.settings.sutaRate = num(document.getElementById('sutaRate').value, appData.settings.sutaRate);
+    appData.settings.futaRate = num(document.getElementById('futaRate').value, appData.settings.futaRate);
+    appData.settings.ssWageBase = num(document.getElementById('ssWageBase').value, appData.settings.ssWageBase);
+    appData.settings.futaWageBase = num(document.getElementById('futaWageBase').value, appData.settings.futaWageBase);
+    appData.settings.sutaWageBase = num(document.getElementById('sutaWageBase').value, appData.settings.sutaWageBase);
+    appData.settings.additionalMedicareThreshold = num(document.getElementById('additionalMedicareThreshold').value, appData.settings.additionalMedicareThreshold);
+    appData.settings.additionalMedicareRate = num(document.getElementById('additionalMedicareRate').value, appData.settings.additionalMedicareRate);
     appData.settings.taxFrequencies.federal = document.getElementById('federalTaxFrequency').value;
     appData.settings.taxFrequencies.futa = document.getElementById('futaTaxFrequency').value;
     appData.settings.taxFrequencies.suta = document.getElementById('sutaTaxFrequency').value;

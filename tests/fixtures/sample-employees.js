@@ -23,6 +23,7 @@ export function createTestEmployee(overrides = {}) {
     localTaxRate: 2,
     ptoAccrualRate: 0.0385, // ~1 hour per pay period for bi-weekly
     ptoBalance: 0,
+    ptoStartingBalance: 0,
     taxRemainders: {
       federal: 0,
       fica: 0,

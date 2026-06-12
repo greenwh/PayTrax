@@ -159,3 +159,17 @@ export function parseDateInput(input, frequency) {
     }
     return { start: null, end: null, title: 'Invalid Period' };
 }
+
+/**
+ * Escapes a string for safe interpolation into HTML (element content and
+ * double-quoted attribute values). Used to harden innerHTML sinks against
+ * tampered backup/import data.
+ * @param {*} str - Value to escape (null/undefined become '')
+ * @returns {string} HTML-safe string
+ */
+export function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}

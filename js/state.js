@@ -169,9 +169,15 @@ export async function loadData() {
         const savedData = localStorage.getItem('PayTraxData');
         if (savedData) {
             console.log("Found data in localStorage. Attempting to migrate to IndexedDB.");
-            loadedData = JSON.parse(savedData);
+            try {
+                loadedData = JSON.parse(savedData);
+            } catch (e) {
+                // Corrupt localStorage must not brick startup (audit F8)
+                console.error('Corrupt localStorage data; starting with defaults.', e);
+                loadedData = null;
+            }
             // If DB is initialized, save the migrated data for future use.
-            if (dbInitialized) {
+            if (loadedData && dbInitialized) {
                 await db.saveDataToDB(loadedData);
             }
         }
