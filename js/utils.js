@@ -173,3 +173,26 @@ export function escapeHtml(str) {
         .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
+
+
+/**
+ * Resolves the value of an effective-dated rate history for a given date.
+ * A history is an array of { effectiveDate: 'YYYY-MM-DD', value: number }.
+ * Returns the value of the latest entry whose effectiveDate is on or before
+ * the given date; dates before the first entry resolve to the first entry.
+ * String comparison is safe because storage dates are YYYY-MM-DD (v9+).
+ * @param {Array|undefined} history - Rate history entries (any order)
+ * @param {string} dateStr - The date to resolve for (YYYY-MM-DD)
+ * @param {number} fallback - Returned when the history is missing or empty
+ * @returns {number} The rate in force on dateStr
+ */
+export function resolveRate(history, dateStr, fallback) {
+    if (!Array.isArray(history) || history.length === 0) return fallback;
+    const sorted = history.slice().sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    let result = sorted[0].value;
+    for (const entry of sorted) {
+        if (entry.effectiveDate <= dateStr) result = entry.value;
+        else break;
+    }
+    return result;
+}

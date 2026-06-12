@@ -12,12 +12,12 @@
 // Reports and CSV exports are in reports.js
 
 import { appData } from './state.js';
-import { formatDate, fromStorageDate, toDisplayDate, getQuarterForDate } from './utils.js';
+import { formatDate, fromStorageDate, toDisplayDate, getQuarterForDate, resolveRate } from './utils.js';
 import { addTransaction } from './banking.js';
-import { calculateDeductions } from './employees.js';
+import { calculateDeductions, upsertRateEntry } from './employees.js';
 
 // Re-export from sub-modules so existing `import * as logic` continues to work
-export { saveEmployeeFromForm, deleteEmployee, addDeduction, updateDeduction, deleteDeduction, calculateDeductions } from './employees.js';
+export { saveEmployeeFromForm, deleteEmployee, addDeduction, updateDeduction, deleteDeduction, calculateDeductions, upsertRateEntry, deleteRateHistoryEntry, RATE_HISTORY_FIELDS } from './employees.js';
 export { generateTaxDepositReportFromData, generateTaxDepositReport, generateW2Report, generate941Report, generate940Report, compute941Data, compute940Data, exportW2ReportToCSV, export941ReportToCSV, export940ReportToCSV, exportDateRangeEmployeeReportToCSV, exportDateRangeEmployerReportToCSV, generateDateRangeEmployeeReport, generateDateRangeEmployerReport } from './reports.js';
 
 // --- PAYROLL & PAY PERIODS ---
@@ -94,6 +94,10 @@ export function generateBasePayPeriods() {
  * After generating, recalculates all periods in sequence to ensure tax remainders are correct.
  */
 export function generatePayPeriods() {
+    // Sync the current-SUTA scalar from its history (v13) before recalculating
+    if (appData.settings.sutaRateHistory) {
+        appData.settings.sutaRate = resolveRate(appData.settings.sutaRateHistory, formatDate(new Date()), appData.settings.sutaRate);
+    }
     const basePeriods = generateBasePayPeriods();
     appData.employees.forEach(emp => {
         const existingData = appData.payPeriods[emp.id] || [];
@@ -175,6 +179,17 @@ export function recalculateAllPeriodsForEmployee(employeeId) {
     });
 
     employee.ptoBalance = Math.round(ptoBalance * 100) / 100;
+
+    // Sync the legacy scalar rate fields to the values currently in force —
+    // histories are the source of truth (v13); the scalars exist so display
+    // code and projections can keep reading "the current rate".
+    const today = formatDate(new Date());
+    if (employee.rateHistories) {
+        employee.rate = resolveRate(employee.rateHistories.rate, today, employee.rate);
+        employee.fedTaxRate = resolveRate(employee.rateHistories.fedTaxRate, today, employee.fedTaxRate);
+        employee.stateTaxRate = resolveRate(employee.rateHistories.stateTaxRate, today, employee.stateTaxRate);
+        employee.localTaxRate = resolveRate(employee.rateHistories.localTaxRate, today, employee.localTaxRate);
+    }
 }
 
 /**
@@ -202,15 +217,21 @@ export function recalculatePeriod(employeeId, periodNum) {
     const hours = period.hours; // Use existing hours from the period
     const payDate = period.payDate; // Get pay date for deduction filtering
 
+    // Effective-dated rates (v13): each period uses the rate in force on its
+    // pay date, so mid-year changes never rewrite already-paid periods.
+    // Scalars are the fallback for un-migrated data.
+    const hourlyRate = resolveRate(employee.rateHistories?.rate, payDate, employee.rate);
+
     const earnings = {
-        regular: hours.regular * employee.rate,
-        overtime: hours.overtime * employee.rate * employee.overtimeMultiplier,
-        holiday: hours.holiday * employee.rate * employee.holidayMultiplier,
-        pto: hours.pto * employee.rate
+        regular: hours.regular * hourlyRate,
+        overtime: hours.overtime * hourlyRate * employee.overtimeMultiplier,
+        holiday: hours.holiday * hourlyRate * employee.holidayMultiplier,
+        pto: hours.pto * hourlyRate
     };
 
     const grossPay = Object.values(earnings).reduce((sum, val) => sum + val, 0);
     const { socialSecurity, medicare, sutaRate, futaRate } = appData.settings;
+    const effectiveSutaRate = resolveRate(appData.settings.sutaRateHistory, payDate, sutaRate);
 
     // Compute YTD gross wages BEFORE this period for wage base cap enforcement
     const year = fromStorageDate(period.payDate).getFullYear();
@@ -256,12 +277,12 @@ export function recalculatePeriod(employeeId, periodNum) {
         newRemainders[taxName] = totalToConsider - rounded[taxName];
     };
 
-    calculateTaxWithRemainder('federal', grossPay * (employee.fedTaxRate / 100));         // NO cap
-    calculateTaxWithRemainder('state', grossPay * (employee.stateTaxRate / 100));          // NO cap
-    calculateTaxWithRemainder('local', grossPay * (employee.localTaxRate / 100));          // NO cap
+    calculateTaxWithRemainder('federal', grossPay * (resolveRate(employee.rateHistories?.fedTaxRate, payDate, employee.fedTaxRate) / 100));   // NO cap
+    calculateTaxWithRemainder('state', grossPay * (resolveRate(employee.rateHistories?.stateTaxRate, payDate, employee.stateTaxRate) / 100)); // NO cap
+    calculateTaxWithRemainder('local', grossPay * (resolveRate(employee.rateHistories?.localTaxRate, payDate, employee.localTaxRate) / 100)); // NO cap
     calculateTaxWithRemainder('fica', ssTaxableWages * (socialSecurity / 100));            // CAPPED by SS wage base
     calculateTaxWithRemainder('medicare', grossPay * (medicare / 100));                    // NO cap
-    calculateTaxWithRemainder('suta', sutaTaxableWages * (sutaRate / 100));                // CAPPED by SUTA wage base
+    calculateTaxWithRemainder('suta', sutaTaxableWages * (effectiveSutaRate / 100));       // CAPPED by SUTA wage base
     calculateTaxWithRemainder('futa', futaTaxableWages * (futaRate / 100));                // CAPPED by FUTA wage base
 
     // Update the employee's stored remainders for the next pay run
@@ -280,6 +301,7 @@ export function recalculatePeriod(employeeId, periodNum) {
     period.earnings = earnings;
     period.grossPay = grossPay;
     period.netPay = netPay;
+    period.appliedHourlyRate = hourlyRate; // rate in force on this pay date, for stubs/PDFs
     period.taxes = { ...rounded, total: employeeTaxes, unrounded };
     period.deductions = deductions;
     period.totalDeductions = totalDeductions;
@@ -437,7 +459,18 @@ export function updateSettingsFromUI() {
     appData.settings.companyPhone = document.getElementById('companyPhone').value;
     appData.settings.socialSecurity = num(document.getElementById('socialSecurity').value, appData.settings.socialSecurity);
     appData.settings.medicare = num(document.getElementById('medicare').value, appData.settings.medicare);
-    appData.settings.sutaRate = num(document.getElementById('sutaRate').value, appData.settings.sutaRate);
+    // SUTA is effective-dated (v13): a changed value becomes a history entry
+    // at the chosen effective date (default today); the scalar tracks the
+    // rate currently in force.
+    const sutaInput = num(document.getElementById('sutaRate').value, appData.settings.sutaRate);
+    const sutaEffectiveDate = document.getElementById('sutaEffectiveDate')?.value || formatDate(new Date());
+    if (!Array.isArray(appData.settings.sutaRateHistory) || appData.settings.sutaRateHistory.length === 0) {
+        appData.settings.sutaRateHistory = [{ effectiveDate: '2000-01-01', value: appData.settings.sutaRate }];
+    }
+    if (sutaInput !== resolveRate(appData.settings.sutaRateHistory, sutaEffectiveDate, appData.settings.sutaRate)) {
+        upsertRateEntry(appData.settings.sutaRateHistory, sutaEffectiveDate, sutaInput);
+    }
+    appData.settings.sutaRate = resolveRate(appData.settings.sutaRateHistory, formatDate(new Date()), sutaInput);
     appData.settings.futaRate = num(document.getElementById('futaRate').value, appData.settings.futaRate);
     appData.settings.ssWageBase = num(document.getElementById('ssWageBase').value, appData.settings.ssWageBase);
     appData.settings.futaWageBase = num(document.getElementById('futaWageBase').value, appData.settings.futaWageBase);

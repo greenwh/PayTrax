@@ -10,7 +10,7 @@
 export function createTestEmployee(overrides = {}) {
   const id = overrides.id || crypto.randomUUID();
 
-  return {
+  const employee = {
     id,
     name: 'Test Employee',
     idNumber: '123-45-6789',
@@ -36,6 +36,18 @@ export function createTestEmployee(overrides = {}) {
     deductions: [],
     ...overrides
   };
+
+  // Seed v13 rate histories from the final scalar values unless provided
+  if (!employee.rateHistories) {
+    employee.rateHistories = {
+      rate: [{ effectiveDate: '2000-01-01', value: employee.rate }],
+      fedTaxRate: [{ effectiveDate: '2000-01-01', value: employee.fedTaxRate }],
+      stateTaxRate: [{ effectiveDate: '2000-01-01', value: employee.stateTaxRate }],
+      localTaxRate: [{ effectiveDate: '2000-01-01', value: employee.localTaxRate }]
+    };
+  }
+
+  return employee;
 }
 
 /**

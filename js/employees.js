@@ -9,10 +9,53 @@
 // js/employees.js - Employee management and deduction calculations
 
 import { appData } from './state.js';
-import { fromStorageDate } from './utils.js';
+import { formatDate, fromStorageDate, resolveRate } from './utils.js';
 import { generateBasePayPeriods } from './logic.js';
 
 // --- EMPLOYEE MANAGEMENT ---
+
+/** The four employee fields that carry effective-dated rate histories (v13). */
+export const RATE_HISTORY_FIELDS = ['rate', 'fedTaxRate', 'stateTaxRate', 'localTaxRate'];
+
+/**
+ * Inserts or replaces a { effectiveDate, value } entry in a rate history.
+ * An entry with the same effectiveDate is replaced (correction); otherwise
+ * the new entry is appended. Keeps the history sorted by effectiveDate.
+ * @param {Array} history - The history array (mutated)
+ * @param {string} effectiveDate - YYYY-MM-DD
+ * @param {number} value - The new rate value
+ */
+export function upsertRateEntry(history, effectiveDate, value) {
+    const existing = history.find(e => e.effectiveDate === effectiveDate);
+    if (existing) {
+        existing.value = value;
+    } else {
+        history.push({ effectiveDate, value });
+        history.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    }
+}
+
+/**
+ * Deletes a rate-history entry. The last remaining entry of a history cannot
+ * be deleted (every rate must always resolve).
+ * @param {string} employeeId - The employee ID
+ * @param {string} field - One of RATE_HISTORY_FIELDS
+ * @param {string} effectiveDate - The entry's effective date
+ * @returns {boolean} true if deleted
+ */
+export function deleteRateHistoryEntry(employeeId, field, effectiveDate) {
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee || !employee.rateHistories || !Array.isArray(employee.rateHistories[field])) return false;
+
+    const history = employee.rateHistories[field];
+    if (history.length <= 1) return false;
+
+    const index = history.findIndex(e => e.effectiveDate === effectiveDate);
+    if (index === -1) return false;
+
+    history.splice(index, 1);
+    return true;
+}
 
 /**
  * Reads data from the employee form and saves it to the appData state.
@@ -40,18 +83,43 @@ export function saveEmployeeFromForm() {
     if (employeeId) {
         const index = appData.employees.findIndex(e => e.id === employeeId);
         if (index > -1) {
+            const existing = appData.employees[index];
             // When editing, preserve the existing remainders, deductions, and
             // computed PTO balance to not lose data (all recomputed on next recalc)
-            const existingRemainders = appData.employees[index].taxRemainders || { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
-            const existingDeductions = appData.employees[index].deductions || [];
-            const existingPtoBalance = appData.employees[index].ptoBalance || 0;
-            appData.employees[index] = { ...employeeData, taxRemainders: existingRemainders, deductions: existingDeductions, ptoBalance: existingPtoBalance };
+            const existingRemainders = existing.taxRemainders || { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 };
+            const existingDeductions = existing.deductions || [];
+            const existingPtoBalance = existing.ptoBalance || 0;
+
+            // Effective-dated rates (v13): a changed rate field becomes a new
+            // history entry at the form's effective date (default today) —
+            // unchanged fields are left alone. Editing an entry to the same
+            // date replaces it (correction).
+            const effectiveDate = document.getElementById('rateEffectiveDate')?.value || formatDate(new Date());
+            const histories = existing.rateHistories || {};
+            RATE_HISTORY_FIELDS.forEach(field => {
+                if (!Array.isArray(histories[field]) || histories[field].length === 0) {
+                    histories[field] = [{ effectiveDate: '2000-01-01', value: existing[field] || 0 }];
+                }
+                const inForce = resolveRate(histories[field], effectiveDate, existing[field] || 0);
+                if (employeeData[field] !== inForce) {
+                    upsertRateEntry(histories[field], effectiveDate, employeeData[field]);
+                }
+            });
+
+            appData.employees[index] = { ...employeeData, rateHistories: histories, taxRemainders: existingRemainders, deductions: existingDeductions, ptoBalance: existingPtoBalance };
         }
     } else {
-        // For a new employee, create a fresh taxRemainders object and empty deductions array
+        // For a new employee, create a fresh taxRemainders object, empty
+        // deductions, and rate histories seeded from the entered rates
         const newEmployee = {
             ...employeeData,
             ptoBalance: employeeData.ptoStartingBalance,
+            rateHistories: {
+                rate: [{ effectiveDate: '2000-01-01', value: employeeData.rate }],
+                fedTaxRate: [{ effectiveDate: '2000-01-01', value: employeeData.fedTaxRate }],
+                stateTaxRate: [{ effectiveDate: '2000-01-01', value: employeeData.stateTaxRate }],
+                localTaxRate: [{ effectiveDate: '2000-01-01', value: employeeData.localTaxRate }]
+            },
             taxRemainders: { federal: 0, fica: 0, medicare: 0, state: 0, local: 0, suta: 0, futa: 0 },
             deductions: []
         };

@@ -75,13 +75,15 @@ export function exportPayStubToPDF(employeeId, periodNum) {
     // Calculate YTD earnings
     const ytdEarnings = calculateYTDEarnings(employeeId, periodNum);
 
-    // Hours and earnings table with YTD
+    // Hours and earnings table with YTD — use the rate actually applied to
+    // this period (v13), so historical stubs stay correct after a raise
+    const stubRate = period.appliedHourlyRate ?? employee.rate;
     const earningsData = [
         ['Type', 'Hours', 'Rate', 'Current', 'YTD'],
-        ['Regular', (period.hours.regular || 0).toFixed(2), `$${employee.rate.toFixed(2)}`, `$${(period.earnings.regular || 0).toFixed(2)}`, `$${ytdEarnings.regular.toFixed(2)}`],
-        ['Overtime', (period.hours.overtime || 0).toFixed(2), `$${(employee.rate * employee.overtimeMultiplier).toFixed(2)}`, `$${(period.earnings.overtime || 0).toFixed(2)}`, `$${ytdEarnings.overtime.toFixed(2)}`],
-        ['Holiday', (period.hours.holiday || 0).toFixed(2), `$${(employee.rate * employee.holidayMultiplier).toFixed(2)}`, `$${(period.earnings.holiday || 0).toFixed(2)}`, `$${ytdEarnings.holiday.toFixed(2)}`],
-        ['PTO', (period.hours.pto || 0).toFixed(2), `$${employee.rate.toFixed(2)}`, `$${(period.earnings.pto || 0).toFixed(2)}`, `$${ytdEarnings.pto.toFixed(2)}`]
+        ['Regular', (period.hours.regular || 0).toFixed(2), `$${stubRate.toFixed(2)}`, `$${(period.earnings.regular || 0).toFixed(2)}`, `$${ytdEarnings.regular.toFixed(2)}`],
+        ['Overtime', (period.hours.overtime || 0).toFixed(2), `$${(stubRate * employee.overtimeMultiplier).toFixed(2)}`, `$${(period.earnings.overtime || 0).toFixed(2)}`, `$${ytdEarnings.overtime.toFixed(2)}`],
+        ['Holiday', (period.hours.holiday || 0).toFixed(2), `$${(stubRate * employee.holidayMultiplier).toFixed(2)}`, `$${(period.earnings.holiday || 0).toFixed(2)}`, `$${ytdEarnings.holiday.toFixed(2)}`],
+        ['PTO', (period.hours.pto || 0).toFixed(2), `$${stubRate.toFixed(2)}`, `$${(period.earnings.pto || 0).toFixed(2)}`, `$${ytdEarnings.pto.toFixed(2)}`]
     ];
 
     const tableStartY = employee.address ? 90 : 82;

@@ -47,6 +47,16 @@ export function displaySettings() {
     document.getElementById('medicare').value = settings.medicare;
     document.getElementById('sutaRate').value = settings.sutaRate;
     document.getElementById('futaRate').value = settings.futaRate;
+
+    // SUTA effective-date picker defaults to today; show the rate history
+    document.getElementById('sutaEffectiveDate').value = formatDate(new Date());
+    const sutaHistoryEl = document.getElementById('sutaRateHistoryDisplay');
+    if (sutaHistoryEl) {
+        const history = (settings.sutaRateHistory || []).slice().sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+        sutaHistoryEl.textContent = history.length > 1
+            ? 'History: ' + history.map(e => `${e.effectiveDate === '2000-01-01' ? 'Initial' : toDisplayDate(e.effectiveDate)}: ${e.value}%`).join(' → ')
+            : '';
+    }
     document.getElementById('ssWageBase').value = settings.ssWageBase;
     document.getElementById('futaWageBase').value = settings.futaWageBase;
     document.getElementById('sutaWageBase').value = settings.sutaWageBase;
@@ -193,6 +203,10 @@ export function resetEmployeeForm() {
     // Hide deductions section for new employees
     document.getElementById('deductionsSection').style.display = 'none';
     document.getElementById('noEmployeeDeductionMsg').style.display = 'block';
+
+    // Hide rate-history section for new employees (their rates are seeded
+    // as effective-from-the-beginning on save)
+    document.getElementById('rateEffectiveSection').style.display = 'none';
 }
 
 /**
@@ -228,6 +242,53 @@ export function renderEmployeeFormForEdit(employeeId) {
     document.getElementById('deductionsSection').style.display = 'block';
     document.getElementById('noEmployeeDeductionMsg').style.display = 'none';
     renderDeductionsTable(employeeId);
+
+    // Show rate-history section; effective date defaults to today
+    document.getElementById('rateEffectiveSection').style.display = 'block';
+    document.getElementById('rateEffectiveDate').value = formatDate(new Date());
+    renderRateHistoryTable(employeeId);
+}
+
+/** Display metadata for the effective-dated rate fields. */
+const RATE_FIELD_LABELS = {
+    rate: { label: 'Hourly Rate', format: (v) => `$${v.toFixed(2)}` },
+    fedTaxRate: { label: 'Federal Tax', format: (v) => `${v.toFixed(1)}%` },
+    stateTaxRate: { label: 'State Tax', format: (v) => `${v.toFixed(1)}%` },
+    localTaxRate: { label: 'Local Tax', format: (v) => `${v.toFixed(1)}%` }
+};
+
+/**
+ * Renders the rate history table for an employee (v13 effective-dated rates).
+ * Entries that are the sole entry of their history get no delete button —
+ * every rate must always resolve to something.
+ * @param {string} employeeId - The ID of the employee
+ */
+export function renderRateHistoryTable(employeeId) {
+    const employee = appData.employees.find(e => e.id === employeeId);
+    const tbody = document.getElementById('rateHistoryTableBody');
+    if (!employee || !tbody) return;
+
+    tbody.innerHTML = '';
+    const histories = employee.rateHistories || {};
+
+    Object.keys(RATE_FIELD_LABELS).forEach(field => {
+        const history = (histories[field] || []).slice().sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+        history.forEach(entry => {
+            const row = document.createElement('tr');
+            const isInitial = entry.effectiveDate === '2000-01-01';
+            const dateDisplay = isInitial ? 'Initial' : toDisplayDate(entry.effectiveDate);
+            const deleteCell = history.length > 1
+                ? `<button class="btn btn-danger btn-sm delete-rate-entry-btn" data-rate-field="${field}" data-effective-date="${entry.effectiveDate}">Delete</button>`
+                : '';
+            row.innerHTML = `
+                <td>${RATE_FIELD_LABELS[field].label}</td>
+                <td>${dateDisplay}</td>
+                <td>${RATE_FIELD_LABELS[field].format(entry.value)}</td>
+                <td>${deleteCell}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    });
 }
 
 /**
@@ -285,10 +346,13 @@ export function renderPayStubUI(employeeId, periodNum) {
     
     const earningsBody = document.getElementById('paystubEarningsBody');
     earningsBody.innerHTML = '';
-    if (period.earnings.regular > 0) earningsBody.innerHTML += `<tr><td>Regular</td><td class="text-right">${employee.rate.toFixed(2)}</td><td class="text-right">${period.hours.regular.toFixed(2)}</td><td class="text-right">$${period.earnings.regular.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.regular || 0).toFixed(2)}</td></tr>`;
-    if (period.earnings.overtime > 0) earningsBody.innerHTML += `<tr><td>Overtime</td><td class="text-right">${(employee.rate * employee.overtimeMultiplier).toFixed(2)}</td><td class="text-right">${period.hours.overtime.toFixed(2)}</td><td class="text-right">$${period.earnings.overtime.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.overtime || 0).toFixed(2)}</td></tr>`;
-    if (period.earnings.holiday > 0) earningsBody.innerHTML += `<tr><td>Holiday</td><td class="text-right">${(employee.rate * employee.holidayMultiplier).toFixed(2)}</td><td class="text-right">${period.hours.holiday.toFixed(2)}</td><td class="text-right">$${period.earnings.holiday.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.holiday || 0).toFixed(2)}</td></tr>`;
-    if (period.earnings.pto > 0) earningsBody.innerHTML += `<tr><td>Paid Time Off</td><td class="text-right">${employee.rate.toFixed(2)}</td><td class="text-right">${period.hours.pto.toFixed(2)}</td><td class="text-right">$${period.earnings.pto.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.pto || 0).toFixed(2)}</td></tr>`;
+    // Show the rate that was actually applied to this period (v13), so
+    // historical stubs stay correct after a raise
+    const stubRate = period.appliedHourlyRate ?? employee.rate;
+    if (period.earnings.regular > 0) earningsBody.innerHTML += `<tr><td>Regular</td><td class="text-right">${stubRate.toFixed(2)}</td><td class="text-right">${period.hours.regular.toFixed(2)}</td><td class="text-right">$${period.earnings.regular.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.regular || 0).toFixed(2)}</td></tr>`;
+    if (period.earnings.overtime > 0) earningsBody.innerHTML += `<tr><td>Overtime</td><td class="text-right">${(stubRate * employee.overtimeMultiplier).toFixed(2)}</td><td class="text-right">${period.hours.overtime.toFixed(2)}</td><td class="text-right">$${period.earnings.overtime.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.overtime || 0).toFixed(2)}</td></tr>`;
+    if (period.earnings.holiday > 0) earningsBody.innerHTML += `<tr><td>Holiday</td><td class="text-right">${(stubRate * employee.holidayMultiplier).toFixed(2)}</td><td class="text-right">${period.hours.holiday.toFixed(2)}</td><td class="text-right">$${period.earnings.holiday.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.holiday || 0).toFixed(2)}</td></tr>`;
+    if (period.earnings.pto > 0) earningsBody.innerHTML += `<tr><td>Paid Time Off</td><td class="text-right">${stubRate.toFixed(2)}</td><td class="text-right">${period.hours.pto.toFixed(2)}</td><td class="text-right">$${period.earnings.pto.toFixed(2)}</td><td class="text-right">$${(ytd.earnings.pto || 0).toFixed(2)}</td></tr>`;
     
     const totalHours = Object.values(period.hours).reduce((sum, h) => sum + h, 0);
     document.getElementById('paystubTotalHours').textContent = totalHours.toFixed(2);

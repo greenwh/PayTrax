@@ -6,7 +6,7 @@
   Licensed under the MIT License.
 */
 
-const CACHE_NAME = 'paytrax-cache-v16';
+const CACHE_NAME = 'paytrax-cache-v17';
 // This list should include all the files that make up the application's shell.
 const urlsToCache = [
   './',

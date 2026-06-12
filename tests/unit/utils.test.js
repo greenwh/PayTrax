@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { formatDate, parseDateInput, toStorageDate, fromStorageDate, toDisplayDate, fromLegacyDate, getQuarterForDate, escapeHtml } from '../../js/utils.js';
+import { formatDate, parseDateInput, toStorageDate, fromStorageDate, toDisplayDate, fromLegacyDate, getQuarterForDate, escapeHtml, resolveRate } from '../../js/utils.js';
 import { appData } from '../../js/state.js';
 
 describe('utils.js', () => {
@@ -292,6 +292,51 @@ describe('utils.js', () => {
 
     it('should escape ampersands first (no double-escaping)', () => {
       expect(escapeHtml('&lt;')).toBe('&amp;lt;');
+    });
+  });
+
+  describe('resolveRate()', () => {
+    const history = [
+      { effectiveDate: '2026-01-01', value: 25 },
+      { effectiveDate: '2026-07-01', value: 30 }
+    ];
+
+    it('returns the fallback for a missing or empty history', () => {
+      expect(resolveRate(undefined, '2026-06-01', 20)).toBe(20);
+      expect(resolveRate(null, '2026-06-01', 20)).toBe(20);
+      expect(resolveRate([], '2026-06-01', 20)).toBe(20);
+    });
+
+    it('returns the entry in force between effective dates', () => {
+      expect(resolveRate(history, '2026-06-30', 0)).toBe(25);
+    });
+
+    it('switches to the new value exactly on the effective date', () => {
+      expect(resolveRate(history, '2026-07-01', 0)).toBe(30);
+      expect(resolveRate(history, '2026-06-30', 0)).toBe(25);
+    });
+
+    it('uses the last entry for dates after all entries', () => {
+      expect(resolveRate(history, '2030-12-31', 0)).toBe(30);
+    });
+
+    it('uses the first entry for dates before all entries', () => {
+      expect(resolveRate(history, '2020-01-01', 0)).toBe(25);
+    });
+
+    it('tolerates an unsorted history without mutating it', () => {
+      const unsorted = [
+        { effectiveDate: '2026-07-01', value: 30 },
+        { effectiveDate: '2026-01-01', value: 25 }
+      ];
+      expect(resolveRate(unsorted, '2026-03-15', 0)).toBe(25);
+      expect(resolveRate(unsorted, '2026-08-15', 0)).toBe(30);
+      expect(unsorted[0].effectiveDate).toBe('2026-07-01'); // input untouched
+    });
+
+    it('handles a single-entry history (the migrated default)', () => {
+      const single = [{ effectiveDate: '2000-01-01', value: 22.5 }];
+      expect(resolveRate(single, '2026-06-12', 0)).toBe(22.5);
     });
   });
 });

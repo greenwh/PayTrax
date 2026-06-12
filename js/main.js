@@ -293,6 +293,35 @@ async function handleDeleteDeduction(event) {
 }
 
 /**
+ * Handles deleting a rate-history entry (delegated event handler).
+ * The last entry of a history cannot be deleted.
+ * @param {Event} event - The click event
+ */
+async function handleDeleteRateEntry(event) {
+    const deleteButton = event.target.closest('.delete-rate-entry-btn');
+    if (!deleteButton) return;
+
+    const field = deleteButton.dataset.rateField;
+    const effectiveDate = deleteButton.dataset.effectiveDate;
+    const employeeId = document.getElementById('employeeId').value;
+
+    const employee = appData.employees.find(e => e.id === employeeId);
+    if (!employee) return;
+
+    const success = logic.deleteRateHistoryEntry(employeeId, field, effectiveDate);
+    if (!success) {
+        showToast('Cannot delete the only remaining entry for this rate.', 'warning');
+        return;
+    }
+
+    logic.recalculateAllPeriodsForEmployee(employeeId);
+    ui.renderRateHistoryTable(employeeId);
+    ui.renderEmployeeFormForEdit(employeeId); // refresh current-rate fields
+    await saveDataImmediate();
+    logAudit('Rate Entry Deleted', `${employee.name}: ${field} entry effective ${effectiveDate}`);
+}
+
+/**
  * Handles generating the pay stub.
  */
 function handleGeneratePayStub() {
@@ -340,6 +369,7 @@ function setupEventListeners() {
     // Deductions Management
     document.getElementById('addDeductionBtn').addEventListener('click', handleAddDeduction);
     document.getElementById('deductionsTableBody').addEventListener('click', handleDeleteDeduction);
+    document.getElementById('rateHistoryTableBody').addEventListener('click', handleDeleteRateEntry);
     
     // Reports
     document.getElementById('reportType').addEventListener('change', ui.toggleReportInputs);

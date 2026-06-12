@@ -8,7 +8,7 @@
  * @returns {Object} Settings object matching PayTrax schema
  */
 export function createTestSettings(overrides = {}) {
-  return {
+  const settings = {
     companyName: 'Test Company LLC',
     taxYear: 2024,
     payFrequency: 'bi-weekly',
@@ -48,6 +48,13 @@ export function createTestSettings(overrides = {}) {
 
     ...overrides
   };
+
+  // Seed v13 SUTA history from the final scalar value unless provided
+  if (!settings.sutaRateHistory) {
+    settings.sutaRateHistory = [{ effectiveDate: '2000-01-01', value: settings.sutaRate }];
+  }
+
+  return settings;
 }
 
 /**
@@ -97,7 +104,7 @@ export function createMonthlySettings(overrides = {}) {
  */
 export function createTestAppData(settingsOverrides = {}, employees = []) {
   return {
-    version: 12,
+    version: 13,
     settings: createTestSettings(settingsOverrides),
     employees: employees,
     payPeriods: {},

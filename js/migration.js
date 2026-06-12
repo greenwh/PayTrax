@@ -8,7 +8,7 @@
 */
 // The authoritative data version number lives here in migration.js.
 // state.js and data-io.js import it from here.
-export const CURRENT_VERSION = 12;
+export const CURRENT_VERSION = 13;
 
 /**
  * Migrates a data object to a new version by adding a new setting with a default value.
@@ -270,6 +270,42 @@ function migrateToV12(data) {
 }
 
 /**
+ * Migrates from version 12 to version 13.
+ * - Adds effective-dated rate histories: employee.rateHistories (hourly rate
+ *   and fed/state/local withholding rates) and settings.sutaRateHistory.
+ *   Each history is seeded with a single entry adopting the current scalar
+ *   value, effective '2000-01-01' so it applies to all periods (same
+ *   precedent as the v6 deduction createdDate).
+ * - The scalar fields remain as the resolved-current values; histories are
+ *   the source of truth from v13 on.
+ * @param {object} data - The application data object to migrate.
+ */
+function migrateToV13(data) {
+    console.log("Running migration to v13...");
+
+    const seed = (value) => [{ effectiveDate: '2000-01-01', value: value || 0 }];
+
+    if (Array.isArray(data.employees)) {
+        data.employees.forEach(emp => {
+            if (emp.rateHistories === undefined) {
+                emp.rateHistories = {
+                    rate: seed(emp.rate),
+                    fedTaxRate: seed(emp.fedTaxRate),
+                    stateTaxRate: seed(emp.stateTaxRate),
+                    localTaxRate: seed(emp.localTaxRate)
+                };
+            }
+        });
+    }
+
+    if (data.settings && data.settings.sutaRateHistory === undefined) {
+        data.settings.sutaRateHistory = seed(data.settings.sutaRate);
+    }
+
+    data.version = 13; // IMPORTANT: Stamp the data with its new version.
+}
+
+/**
  * Sequentially runs all necessary migration scripts on a data object.
  * @param {object} data - The application data object, potentially from an old version.
  * @returns {object} The fully migrated data object.
@@ -312,6 +348,9 @@ export function migrateData(data) {
             // Fall-through is intentional
         case 11:
             migrateToV12(data);
+            // Fall-through is intentional
+        case 12:
+            migrateToV13(data);
             // Fall-through is intentional for future migrations
             break;
     }

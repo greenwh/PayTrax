@@ -234,6 +234,12 @@
                             <input type="number" id="sutaRate" class="form-input" placeholder="2.7" step="0.1" min="0" max="10">
                         </div>
                         <div class="form-group">
+                            <label class="form-label">SUTA Change Effective</label>
+                            <input type="date" id="sutaEffectiveDate" class="form-input">
+                            <small style="color:#6c757d; display:block;">Set this date <em>before</em> changing the SUTA rate. Pay dates before it keep the old rate.</small>
+                            <small style="color:#6c757d;" id="sutaRateHistoryDisplay"></small>
+                        </div>
+                        <div class="form-group">
                             <label class="form-label">FUTA Rate (%) - Employer</label>
                             <input type="number" id="futaRate" class="form-input" value="0.6" step="0.1" min="0" max="2">
                         </div>
@@ -401,6 +407,30 @@
                              <div class="form-group">
                                 <label class="form-label">Local Tax Rate (%)</label>
                                 <input type="number" id="localTax" class="form-input" placeholder="1.0" step="0.1" min="0" max="10" value="0">
+                            </div>
+                        </div>
+
+                        <div id="rateEffectiveSection" style="display:none;">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">Rate Changes Effective</label>
+                                    <input type="date" id="rateEffectiveDate" class="form-input">
+                                    <small style="color:#6c757d;">Changed rates above apply to pay dates on/after this date. Earlier periods keep their old rates.</small>
+                                </div>
+                            </div>
+                            <div style="overflow-x: auto; margin-bottom: 15px;">
+                                <table class="report-table" id="rateHistoryTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Rate</th>
+                                            <th>Effective Date</th>
+                                            <th>Value</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="rateHistoryTableBody">
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 

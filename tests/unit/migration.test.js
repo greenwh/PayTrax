@@ -5,14 +5,14 @@ import testDataV6 from '../fixtures/test-data-v6.json';
 
 describe('migration.js', () => {
   describe('migrateData() - Full Migration Chain', () => {
-    it('should migrate v1 data to v12', () => {
+    it('should migrate v1 data to v13', () => {
       // Create a deep copy to avoid mutating the fixture
       const v1Data = JSON.parse(JSON.stringify(testDataV1));
 
       const migrated = migrateData(v1Data);
 
       // Should be at v9
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
 
       // v2 additions
       expect(migrated.settings.employeeIdPrefix).toBeDefined();
@@ -51,13 +51,13 @@ describe('migration.js', () => {
       expect(migrated.settings.minimumWeeklyHours).toBe(20);
     });
 
-    it('should migrate v6 data to v12', () => {
+    it('should migrate v6 data to v13', () => {
       const v6Data = JSON.parse(JSON.stringify(testDataV6));
 
       const migrated = migrateData(v6Data);
 
       // Should be at v9
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
 
       // v7 additions - autoSubtraction
       expect(migrated.settings.autoSubtraction).toBe(true);
@@ -68,7 +68,7 @@ describe('migration.js', () => {
       expect(migrated.employees[0].deductions[1].createdDate).toBe('2000-01-01');
     });
 
-    it('should migrate v7 data to v12 adding sutaWageBase and converting dates', () => {
+    it('should migrate v7 data to v13 adding sutaWageBase and converting dates', () => {
       const v7Data = {
         version: 7,
         settings: { companyName: 'Test', autoSubtraction: false },
@@ -79,12 +79,12 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v7Data)));
 
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
       expect(migrated.settings.autoSubtraction).toBe(false); // Should not be changed
       expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
     });
 
-    it('should migrate v8 data to v12 converting date formats', () => {
+    it('should migrate v8 data to v13 converting date formats', () => {
       const v8Data = {
         version: 8,
         settings: { companyName: 'Test', autoSubtraction: false, sutaWageBase: 30000 },
@@ -101,7 +101,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v8Data)));
 
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
       expect(migrated.settings.sutaWageBase).toBe(30000); // Should not be changed
 
       // v9: dates converted to YYYY-MM-DD
@@ -111,7 +111,7 @@ describe('migration.js', () => {
       expect(migrated.bankRegister[0].date).toBe('2024-01-15');
     });
 
-    it('should migrate v9 data to v12 adding quarterly earnings settings', () => {
+    it('should migrate v9 data to v13 adding quarterly earnings settings', () => {
       const v9Data = {
         version: 9,
         settings: { companyName: 'Test', autoSubtraction: true, sutaWageBase: 25000 },
@@ -122,7 +122,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v9Data)));
 
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
       expect(migrated.settings.quarterlyEarningsTarget).toBe(1890);
       expect(migrated.settings.minimumWeeklyHours).toBe(20);
       expect(migrated.settings.autoSubtraction).toBe(true); // Preserved
@@ -144,12 +144,12 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v9Data)));
 
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
       expect(migrated.settings.quarterlyEarningsTarget).toBe(0);
       expect(migrated.settings.minimumWeeklyHours).toBe(15);
     });
 
-    it('should migrate v10 data to v12 adding auditLog', () => {
+    it('should migrate v10 data to v13 adding auditLog', () => {
       const v10Data = {
         version: 10,
         settings: { companyName: 'Test', quarterlyEarningsTarget: 2000, minimumWeeklyHours: 25 },
@@ -160,14 +160,14 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v10Data)));
 
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
       expect(migrated.settings.quarterlyEarningsTarget).toBe(2000);
       expect(migrated.settings.minimumWeeklyHours).toBe(25);
       expect(Array.isArray(migrated.auditLog)).toBe(true);
       expect(migrated.auditLog).toEqual([]);
     });
 
-    it('should migrate v11 data to v12 adding ptoStartingBalance from ptoBalance', () => {
+    it('should migrate v11 data to v13 adding ptoStartingBalance from ptoBalance', () => {
       const v11Data = {
         version: 11,
         settings: { companyName: 'Test', quarterlyEarningsTarget: 2000, minimumWeeklyHours: 25 },
@@ -182,7 +182,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(JSON.parse(JSON.stringify(v11Data)));
 
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
       // Pre-v12 calcs never changed ptoBalance, so it is adopted as the starting balance
       expect(migrated.employees[0].ptoStartingBalance).toBe(25);
       expect(migrated.employees[1].ptoStartingBalance).toBe(0);
@@ -190,22 +190,55 @@ describe('migration.js', () => {
       expect(migrated.auditLog[0].action).toBe('Test');
     });
 
-    it('should not modify data already at v12', () => {
+    it('should migrate v12 data to v13 adding rate histories from scalar rates', () => {
       const v12Data = {
         version: 12,
-        settings: { companyName: 'Test', quarterlyEarningsTarget: 2000, minimumWeeklyHours: 25 },
-        employees: [{ id: 'emp-1', name: 'John', ptoBalance: 30, ptoStartingBalance: 10 }],
+        settings: { companyName: 'Test', sutaRate: 2.7, quarterlyEarningsTarget: 2000, minimumWeeklyHours: 25 },
+        employees: [
+          { id: 'emp-1', name: 'John', rate: 25, fedTaxRate: 12, stateTaxRate: 5, localTaxRate: 2, ptoBalance: 30, ptoStartingBalance: 10 },
+          { id: 'emp-2', name: 'Jane' } // no rates at all
+        ],
+        payPeriods: {},
+        bankRegister: [],
+        auditLog: []
+      };
+
+      const migrated = migrateData(JSON.parse(JSON.stringify(v12Data)));
+
+      expect(migrated.version).toBe(13);
+      expect(migrated.employees[0].ptoStartingBalance).toBe(10); // v12 field not overwritten
+
+      // Histories seeded from the scalar values, effective from the beginning
+      expect(migrated.employees[0].rateHistories.rate).toEqual([{ effectiveDate: '2000-01-01', value: 25 }]);
+      expect(migrated.employees[0].rateHistories.fedTaxRate).toEqual([{ effectiveDate: '2000-01-01', value: 12 }]);
+      expect(migrated.employees[0].rateHistories.stateTaxRate).toEqual([{ effectiveDate: '2000-01-01', value: 5 }]);
+      expect(migrated.employees[0].rateHistories.localTaxRate).toEqual([{ effectiveDate: '2000-01-01', value: 2 }]);
+      expect(migrated.employees[1].rateHistories.rate).toEqual([{ effectiveDate: '2000-01-01', value: 0 }]);
+      expect(migrated.settings.sutaRateHistory).toEqual([{ effectiveDate: '2000-01-01', value: 2.7 }]);
+    });
+
+    it('should not modify data already at v13', () => {
+      const v13Data = {
+        version: 13,
+        settings: {
+          companyName: 'Test', sutaRate: 3.0,
+          sutaRateHistory: [{ effectiveDate: '2000-01-01', value: 2.7 }, { effectiveDate: '2026-07-01', value: 3.0 }]
+        },
+        employees: [{
+          id: 'emp-1', name: 'John', rate: 30, ptoBalance: 30, ptoStartingBalance: 10,
+          rateHistories: { rate: [{ effectiveDate: '2000-01-01', value: 25 }, { effectiveDate: '2026-06-01', value: 30 }] }
+        }],
         payPeriods: {},
         bankRegister: [],
         auditLog: [{ timestamp: '2026-01-01T00:00:00Z', action: 'Test', details: 'existing' }]
       };
 
-      const migrated = migrateData(JSON.parse(JSON.stringify(v12Data)));
+      const migrated = migrateData(JSON.parse(JSON.stringify(v13Data)));
 
-      expect(migrated.version).toBe(12);
-      expect(migrated.employees[0].ptoStartingBalance).toBe(10); // not overwritten
+      expect(migrated.version).toBe(13);
+      expect(migrated.employees[0].rateHistories.rate).toHaveLength(2); // not re-seeded
+      expect(migrated.settings.sutaRateHistory).toHaveLength(2);        // not re-seeded
       expect(migrated.auditLog).toHaveLength(1);
-      expect(migrated.auditLog[0].action).toBe('Test');
     });
   });
 
@@ -520,7 +553,7 @@ describe('migration.js', () => {
 
       const migrated = migrateData(unversionedData);
 
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
       expect(migrated.settings.employeeIdPrefix).toBeDefined(); // v2 addition
       expect(migrated.settings.autoSubtraction).toBeDefined(); // v7 addition
       expect(migrated.settings.sutaWageBase).toBe(25000); // v8 addition
@@ -538,7 +571,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v1Data);
 
       expect(migrated.employees).toEqual([]);
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
     });
 
     it('should handle empty bank register', () => {
@@ -553,7 +586,7 @@ describe('migration.js', () => {
       const migrated = migrateData(v3Data);
 
       expect(migrated.bankRegister).toEqual([]);
-      expect(migrated.version).toBe(12);
+      expect(migrated.version).toBe(13);
     });
 
     it('should preserve all existing data during migration', () => {

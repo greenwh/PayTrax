@@ -107,11 +107,11 @@ python -m http.server 8000
 
 **Test Framework:** Vitest with browser mode (Playwright)
 **Coverage Provider:** Istanbul (works with browser mode)
-**Test Files:** 378 tests across utils, validation, db, migration, state, toast, undo, audit, and integration modules (incl. PTO, banking purge, 941/940 compute)
+**Test Files:** 399 tests across utils, validation, db, migration, state, toast, undo, audit, and integration modules (incl. PTO, banking purge, 941/940 compute, effective-dated rates)
 
 **Running Tests:**
 ```bash
-npm test                 # Run all 378 tests
+npm test                 # Run all 399 tests
 npm run test:watch       # Run tests in watch mode
 npm run test:ui          # Open Vitest UI dashboard
 npm run test:coverage    # Run tests with coverage report
@@ -176,10 +176,11 @@ js/audit.js       → Audit trail logging (action history, auto-prune at 500 ent
 **Data Structure:**
 ```javascript
 appData = {
-  version: 12,  // Current data version
+  version: 13,  // Current data version
   settings: {
     companyName, taxYear, payFrequency, firstPayPeriodStartDate,
     socialSecurity, medicare, sutaRate, futaRate,
+    sutaRateHistory: [{ effectiveDate, value }],  // NEW v13: sutaRate is the synced "current" value
     ssWageBase, futaWageBase, sutaWageBase,  // NEW sutaWageBase in v8
     additionalMedicareThreshold, additionalMedicareRate,  // NEW in v5
     taxFrequencies: { federal, futa, suta, state, local },
@@ -189,6 +190,9 @@ appData = {
     id, name, idNumber, address, rate, overtimeMultiplier, holidayMultiplier,
     fedTaxRate, stateTaxRate, localTaxRate,
     ptoAccrualRate, ptoStartingBalance, ptoBalance,  // v12: ptoStartingBalance is user-entered; ptoBalance is computed
+    rateHistories: {  // NEW v13: effective-dated rates; scalars above are synced "current" values
+      rate: [{ effectiveDate, value }], fedTaxRate: [...], stateTaxRate: [...], localTaxRate: [...]
+    },
     taxRemainders: { federal, fica, medicare, state, local, suta, futa },
     deductions: [{ id, name, amount, type }]  // NEW in v5
   }],
@@ -197,6 +201,7 @@ appData = {
     hours: { regular, overtime, pto, holiday },
     earnings: { regular, overtime, pto, holiday },
     grossPay, netPay, ptoAccrued, ptoBalanceAfter,  // ptoBalanceAfter NEW in v12 (running PTO balance per period)
+    appliedHourlyRate,  // NEW v13: the hourly rate in force on this pay date (used by stubs/PDFs)
     taxes: { federal, fica, medicare, state, local, suta, futa, total, unrounded },
     deductions: [...],  // NEW in v5
     totalDeductions     // NEW in v5
@@ -242,13 +247,13 @@ Single module import triggers entire app initialization. Service Worker is regis
 | **Undo Operations** | `undo.js` | `pushUndo()`, `createSnapshot()` for delete employee/deduction/transaction **NEW v11** |
 | **Audit Trail** | `audit.js` + `ui.js` | `logAudit()`, `getAuditLog()`, `clearAuditLog()`, `renderAuditLog()` **NEW v11** |
 | **Compliance Summary** | `ui.js` | `refreshComplianceSummary()` — filing deadlines, YTD totals, backup status **NEW v11** |
-| Backward Compatibility | `migration.js` | Handles v1→v12 data migration sequentially |
+| Backward Compatibility | `migration.js` | Handles v1→v13 data migration sequentially |
 
 ## Data Versioning & Migration
 
-**Current Version:** 12
+**Current Version:** 13
 
-Data is automatically migrated both on IndexedDB load (startup) and during JSON import. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v12 transformations are applied. `CURRENT_VERSION` is defined in `migration.js` and re-exported from `state.js`.
+Data is automatically migrated both on IndexedDB load (startup) and during JSON import. The migration flow in `migration.js` uses a fall-through switch statement ensuring all v1→v13 transformations are applied. `CURRENT_VERSION` is defined in `migration.js` and re-exported from `state.js`.
 
 **Version History:**
 - v1 → Initial structure
@@ -263,12 +268,13 @@ Data is automatically migrated both on IndexedDB load (startup) and during JSON 
 - v10 → Added quarterlyEarningsTarget and minimumWeeklyHours settings
 - v11 → Added auditLog array for tracking user actions
 - v12 → Added ptoStartingBalance per employee (user-entered; existing ptoBalance value adopted as starting balance since pre-v12 calculations never modified it). `ptoBalance` and per-period `ptoAccrued`/`ptoBalanceAfter` are now derived by `recalculateAllPeriodsForEmployee()`.
+- v13 → Effective-dated rates: `employee.rateHistories` (hourly + fed/state/local withholding) and `settings.sutaRateHistory`, seeded from the scalar values effective '2000-01-01'. Each period resolves rates as of its **pay date** via `utils.js::resolveRate()`; scalars remain as synced "current" values. Adds `period.appliedHourlyRate`.
 
 ## PWA & Offline Support
 
 **Service Worker (`sw.js`):**
 - Cache-first strategy with network fallback
-- Cache name: `paytrax-cache-v16`
+- Cache name: `paytrax-cache-v17`
 - All app assets are cached for offline functionality; icon paths point to `docs/icons/` (there is no root `icons/` directory)
 - Install uses `Promise.allSettled` per-URL so one missing asset cannot fail the whole install
 - Full app works without internet connection
@@ -313,7 +319,7 @@ PayTrax now has comprehensive automated testing with Vitest. Run tests before an
 
 **Quick Start:**
 ```bash
-npm test              # Run all tests (378 tests pass)
+npm test              # Run all tests (399 tests pass)
 npm run test:coverage # Check coverage and identify gaps
 ```
 
@@ -395,8 +401,10 @@ For UI interactions and visual verification:
 ### Additional Medicare Tax — reported, not withheld
 - PayTrax reports wages over `additionalMedicareThreshold` on the Form 941 report (and shows a prominent warning when non-zero) but does **not** withhold the 0.9% Additional Medicare Tax from paychecks. Implementing withholding is a deliberate non-goal at current wage levels; see audit F6 (June 2026).
 
-### Retroactive Recalculation (design decision)
-- Changing an employee's hourly rate or any tax rate recalculates ALL periods in the tax year on the next recalc/app load, including already-paid ones. Documented in the User Manual; effective-dated rates are a possible future feature. Advise exporting a backup before mid-year rate changes.
+### Effective-Dated Rates (v13) — retroactive recalculation mostly retired
+- **Hourly rate, fed/state/local withholding rates, and SUTA** are effective-dated: each period uses the rate in force on its **pay date** (`resolveRate()`), so a mid-year change never rewrites already-paid periods. Changing a rate in the UI creates a history entry at the form's "effective" date (default today); editing/deleting history entries is the deliberate correction path and recalculates the year.
+- **SS, Medicare, FUTA, wage bases, thresholds, multipliers, PTO accrual rate remain full-year scalars** — editing them still recalculates ALL periods (intended: these change Jan 1; a mid-year edit is a typo fix). Advise a backup before editing those mid-year.
+- The scalar rate fields (`employee.rate` etc., `settings.sutaRate`) are synced to the currently-in-force value by `recalculateAllPeriodsForEmployee()` / `generatePayPeriods()` — never write them directly; write history entries.
 
 ### Git & Deployment
 - Clean git history, ready for GitHub Pages
